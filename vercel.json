@@ -1,5 +1,5 @@
 {
-  "outputDirectory": "dist/public",
+  "framework": null,
   "rewrites": [
     {
       "source": "/api/(.*)",
