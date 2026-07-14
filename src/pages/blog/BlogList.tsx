@@ -22,7 +22,7 @@ interface BlogPost {
 
 async function fetchPosts(): Promise<BlogPost[]> {
   try {
-    const res = await fetch("/api/cms/blogs");
+    const res = await fetch("/api/blogs");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return Array.isArray(data) ? data : [];
@@ -33,7 +33,7 @@ async function fetchPosts(): Promise<BlogPost[]> {
 
 async function deletePost(slug: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/cms/blogs/${slug}`, { method: "DELETE" });
+    const res = await fetch(`/api/blogs/${slug}`, { method: "DELETE" });
     return res.ok;
   } catch {
     return false;
