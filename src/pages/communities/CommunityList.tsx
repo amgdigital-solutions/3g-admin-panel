@@ -23,7 +23,7 @@ interface Community {
 
 async function fetchCommunities(): Promise<Community[]> {
   try {
-    const res = await fetch("/api/cms/communities");
+    const res = await fetch("/api/communities");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return Array.isArray(data) ? data : [];
@@ -34,7 +34,7 @@ async function fetchCommunities(): Promise<Community[]> {
 
 async function deleteCommunity(slug: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/cms/communities/${slug}`, { method: "DELETE" });
+    const res = await fetch(`/api/communities/${slug}`, { method: "DELETE" });
     return res.ok;
   } catch {
     return false;
