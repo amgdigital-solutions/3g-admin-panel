@@ -15,29 +15,28 @@ interface BlogPost {
   slug: string;
   title: string;
   category: string;
-  author_name: string;
+  author_name?: string;
+  author?: string;
   status: string;
   featured_image?: string;
+  coverImage?: string;
 }
 
-async function fetchPosts(): Promise<BlogPost[]> {
+async function fetchApi(url: string) {
   try {
-    const res = await fetch("/api/blogs");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const res = await fetch(url);
+    if (!res.ok) { console.error(`[BlogList] API error ${res.status}`); return []; }
+    const json = await res.json();
+    const data = json.data || json.result?.data || [];
     return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  } catch (err) { console.error(`[BlogList] Fetch error:`, err); return []; }
 }
 
 async function deletePost(slug: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/blogs/${slug}`, { method: "DELETE" });
+    const res = await fetch(`/api/cms/blogs/${slug}`, { method: "DELETE" });
     return res.ok;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 export default function BlogList() {
@@ -50,29 +49,24 @@ export default function BlogList() {
 
   const load = async () => {
     setIsLoading(true);
-    const data = await fetchPosts();
+    const data = await fetchApi("/api/cms/blogs");
     setPosts(data);
     setIsLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const handleDelete = async (slug: string) => {
     setDeletingSlug(slug);
     const ok = await deletePost(slug);
-    if (ok) {
-      setPosts((prev) => prev.filter((p) => p.slug !== slug));
-    }
+    if (ok) setPosts((prev) => prev.filter((p) => p.slug !== slug));
     setDeletingSlug(null);
   };
 
   const filtered = posts.filter((p) => {
-    const matchesSearch =
-      search === "" ||
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.slug.toLowerCase().includes(search.toLowerCase()) ||
+    const matchesSearch = search === "" ||
+      p.title?.toLowerCase().includes(search.toLowerCase()) ||
+      p.slug?.toLowerCase().includes(search.toLowerCase()) ||
       p.category?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || p.category === categoryFilter;
@@ -81,14 +75,14 @@ export default function BlogList() {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case "published":
-        return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
-      case "draft":
-        return <Badge variant="secondary">Draft</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+      case "published": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
+      case "draft": return <Badge variant="secondary">Draft</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
     }
   };
+
+  const getImage = (p: BlogPost) => p.featured_image || p.coverImage;
+  const getAuthor = (p: BlogPost) => p.author_name || p.author || "3G Real Estate";
 
   return (
     <div className="space-y-6">
@@ -148,11 +142,11 @@ export default function BlogList() {
                 </TableRow>
               ) : (
                 filtered.map((post) => (
-                  <TableRow key={post.id} className="group">
+                  <TableRow key={post.id || post.slug} className="group">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        {post.featured_image ? (
-                          <img src={post.featured_image} alt={post.title} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                        {getImage(post) ? (
+                          <img src={getImage(post)} alt={post.title} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
                         ) : (
                           <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><FileText className="h-4 w-4 text-gray-400" /></div>
                         )}
@@ -163,11 +157,11 @@ export default function BlogList() {
                       </div>
                     </TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{post.category}</Badge></TableCell>
-                    <TableCell className="text-sm text-gray-600">{post.author_name}</TableCell>
+                    <TableCell className="text-sm text-gray-600">{getAuthor(post)}</TableCell>
                     <TableCell>{statusBadge(post.status)}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link to={`/blog-posts/${post.id}`}><Button size="icon" variant="ghost" className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button></Link>
+                        <Link to={`/blog-posts/${post.id || post.slug}`}><Button size="icon" variant="ghost" className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button></Link>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -175,7 +169,7 @@ export default function BlogList() {
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Blog Post</AlertDialogTitle>
-                              <AlertDialogDescription>Are you sure you want to delete "{post.title}"? This cannot be undone.</AlertDialogDescription>
+                              <AlertDialogDescription>Delete "{post.title}"? This cannot be undone.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>

@@ -36,14 +36,14 @@ interface Stats {
   featuredCount: number;
 }
 
-async function fetchJson(url: string) {
+async function fetchApi(url: string) {
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch {
-    return [];
-  }
+    if (!res.ok) { console.error(`[Dashboard] API error ${res.status} for ${url}`); return []; }
+    const json = await res.json();
+    const data = json.data || json.result?.data || [];
+    return Array.isArray(data) ? data : [];
+  } catch (err) { console.error(`[Dashboard] Fetch error for ${url}:`, err); return []; }
 }
 
 export default function Dashboard() {
@@ -59,20 +59,18 @@ export default function Dashboard() {
     let cancelled = false;
     async function load() {
       const [properties, blogs, communities, downloads] = await Promise.all([
-        fetchJson("/api/properties"),
-        fetchJson("/api/blogs"),
-        fetchJson("/api/communities"),
-        fetchJson("/api/download-requests"),
+        fetchApi("/api/cms/properties"),
+        fetchApi("/api/cms/blogs"),
+        fetchApi("/api/cms/communities"),
+        fetchApi("/api/download-requests?action=list"),
       ]);
       if (cancelled) return;
-      const featured = (Array.isArray(properties) ? properties : []).filter(
-        (p: any) => p.featured
-      ).length;
+      const featured = properties.filter((p: any) => p.showInHero || p.show_in_hero || p.featured).length;
       setStats({
-        totalProperties: Array.isArray(properties) ? properties.length : 0,
-        totalBlogPosts: Array.isArray(blogs) ? blogs.length : 0,
-        totalCommunities: Array.isArray(communities) ? communities.length : 0,
-        totalDownloads: Array.isArray(downloads) ? downloads.length : 0,
+        totalProperties: properties.length,
+        totalBlogPosts: blogs.length,
+        totalCommunities: communities.length,
+        totalDownloads: downloads.length,
         featuredCount: featured,
       });
       setIsLoading(false);

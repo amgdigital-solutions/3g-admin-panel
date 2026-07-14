@@ -14,31 +14,31 @@ interface Community {
   id: string;
   slug: string;
   name: string;
-  location: string;
-  avg_price: string;
-  property_types: string[];
-  status: string;
+  location?: string;
+  avg_price?: string;
+  priceRange?: string;
+  property_types?: string[];
+  propertyTypes?: string[];
+  status?: string;
+  isPublished?: boolean;
   image?: string;
 }
 
-async function fetchCommunities(): Promise<Community[]> {
+async function fetchApi(url: string) {
   try {
-    const res = await fetch("/api/communities");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const res = await fetch(url);
+    if (!res.ok) { console.error(`[CommunityList] API error ${res.status}`); return []; }
+    const json = await res.json();
+    const data = json.data || json.result?.data || [];
     return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  } catch (err) { console.error(`[CommunityList] Fetch error:`, err); return []; }
 }
 
 async function deleteCommunity(slug: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/communities/${slug}`, { method: "DELETE" });
+    const res = await fetch(`/api/cms/communities/${slug}`, { method: "DELETE" });
     return res.ok;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 export default function CommunityList() {
@@ -50,44 +50,41 @@ export default function CommunityList() {
 
   const load = async () => {
     setIsLoading(true);
-    const data = await fetchCommunities();
+    const data = await fetchApi("/api/cms/communities");
     setCommunities(data);
     setIsLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const handleDelete = async (slug: string) => {
     setDeletingSlug(slug);
     const ok = await deleteCommunity(slug);
-    if (ok) {
-      setCommunities((prev) => prev.filter((c) => c.slug !== slug));
-    }
+    if (ok) setCommunities((prev) => prev.filter((c) => c.slug !== slug));
     setDeletingSlug(null);
   };
 
   const filtered = communities.filter((c) => {
-    const matchesSearch =
-      search === "" ||
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.slug.toLowerCase().includes(search.toLowerCase()) ||
+    const matchesSearch = search === "" ||
+      c.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.slug?.toLowerCase().includes(search.toLowerCase()) ||
       c.location?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "all" || c.status === statusFilter;
+    const cStatus = c.status || (c.isPublished ? "published" : "draft");
+    const matchesStatus = statusFilter === "all" || cStatus === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case "published":
-        return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
-      case "draft":
-        return <Badge variant="secondary">Draft</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+      case "published": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
+      case "draft": return <Badge variant="secondary">Draft</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
     }
   };
+
+  const getTypes = (c: Community) => c.property_types || c.propertyTypes || [];
+  const getPrice = (c: Community) => c.avg_price || c.priceRange || "-";
+  const getStatus = (c: Community) => c.status || (c.isPublished ? "published" : "draft");
 
   return (
     <div className="space-y-6">
@@ -136,54 +133,57 @@ export default function CommunityList() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((community) => (
-                  <TableRow key={community.id} className="group">
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        {community.image ? (
-                          <img src={community.image} alt={community.name} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><MapPin className="h-4 w-4 text-gray-400" /></div>
-                        )}
-                        <div>
-                          <p className="font-medium text-sm text-gray-900">{community.name}</p>
-                          <p className="text-xs text-gray-500">{community.slug}</p>
+                filtered.map((community) => {
+                  const types = getTypes(community);
+                  return (
+                    <TableRow key={community.id || community.slug} className="group">
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          {community.image ? (
+                            <img src={community.image} alt={community.name} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><MapPin className="h-4 w-4 text-gray-400" /></div>
+                          )}
+                          <div>
+                            <p className="font-medium text-sm text-gray-900">{community.name}</p>
+                            <p className="text-xs text-gray-500">{community.slug}</p>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-600">{community.location}</TableCell>
-                    <TableCell className="text-sm font-medium">{community.avg_price}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {(community.property_types || []).slice(0, 2).map((t, i) => <Badge key={i} variant="outline" className="text-xs">{t}</Badge>)}
-                        {(community.property_types || []).length > 2 && <Badge variant="outline" className="text-xs">+{(community.property_types || []).length - 2}</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell>{statusBadge(community.status)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link to={`/communities/${community.id}`}><Button size="icon" variant="ghost" className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button></Link>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /></Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Community</AlertDialogTitle>
-                              <AlertDialogDescription>Are you sure? This cannot be undone.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(community.slug)} disabled={deletingSlug === community.slug} className="bg-red-600 hover:bg-red-700">
-                                {deletingSlug === community.slug ? "Deleting..." : "Delete"}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">{community.location || "-"}</TableCell>
+                      <TableCell className="text-sm font-medium">{getPrice(community)}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {types.slice(0, 2).map((t, i) => <Badge key={i} variant="outline" className="text-xs">{t}</Badge>)}
+                          {types.length > 2 && <Badge variant="outline" className="text-xs">+{types.length - 2}</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell>{statusBadge(getStatus(community))}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Link to={`/communities/${community.id || community.slug}`}><Button size="icon" variant="ghost" className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button></Link>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Community</AlertDialogTitle>
+                                <AlertDialogDescription>Delete "{community.name}"? This cannot be undone.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(community.slug)} disabled={deletingSlug === community.slug} className="bg-red-600 hover:bg-red-700">
+                                  {deletingSlug === community.slug ? "Deleting..." : "Delete"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

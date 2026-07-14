@@ -17,30 +17,29 @@ interface Property {
   location: string;
   property_type: string;
   price: number;
-  price_display?: string;
   status: string;
-  featured: boolean;
+  show_in_hero?: boolean;
+  showInHero?: boolean;
+  featured_image?: string;
+  coverImage?: string;
   images?: string[];
 }
 
-async function fetchProperties(): Promise<Property[]> {
+async function fetchApi(url: string) {
   try {
-    const res = await fetch("/api/properties");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const res = await fetch(url);
+    if (!res.ok) { console.error(`[PropertyList] API error ${res.status}`); return []; }
+    const json = await res.json();
+    const data = json.data || json.result?.data || [];
     return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  } catch (err) { console.error(`[PropertyList] Fetch error:`, err); return []; }
 }
 
 async function deleteProperty(slug: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/properties/${slug}`, { method: "DELETE" });
+    const res = await fetch(`/api/cms/properties/${slug}`, { method: "DELETE" });
     return res.ok;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 export default function PropertyList() {
@@ -53,47 +52,42 @@ export default function PropertyList() {
 
   const load = async () => {
     setIsLoading(true);
-    const data = await fetchProperties();
+    const data = await fetchApi("/api/cms/properties");
     setProperties(data);
     setIsLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const handleDelete = async (slug: string) => {
     setDeletingSlug(slug);
     const ok = await deleteProperty(slug);
-    if (ok) {
-      setProperties((prev) => prev.filter((p) => p.slug !== slug));
-    }
+    if (ok) setProperties((prev) => prev.filter((p) => p.slug !== slug));
     setDeletingSlug(null);
   };
 
   const filtered = properties.filter((p) => {
-    const matchesSearch =
-      search === "" ||
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.location.toLowerCase().includes(search.toLowerCase()) ||
-      p.slug.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = search === "" ||
+      p.title?.toLowerCase().includes(search.toLowerCase()) ||
+      p.location?.toLowerCase().includes(search.toLowerCase()) ||
+      p.slug?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    const matchesType = typeFilter === "all" || p.property_type === typeFilter;
+    const ptype = p.property_type || "";
+    const matchesType = typeFilter === "all" || ptype === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
   });
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case "published":
-        return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
-      case "draft":
-        return <Badge variant="secondary">Draft</Badge>;
-      case "sold_out":
-        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Sold Out</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+      case "published": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
+      case "draft": return <Badge variant="secondary">Draft</Badge>;
+      case "sold_out": return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Sold Out</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
     }
   };
+
+  const getImage = (p: Property) => p.featured_image || p.coverImage || (p.images?.length ? p.images[0] : null);
+  const isFeatured = (p: Property) => p.show_in_hero || p.showInHero;
 
   return (
     <div className="space-y-6">
@@ -145,24 +139,21 @@ export default function PropertyList() {
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
-                  </TableRow>
+                  <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
                 ))
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-12 text-gray-400">
-                    <Eye className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                    <p>No properties found</p>
+                    <Eye className="h-8 w-8 mx-auto mb-2 text-gray-300" /><p>No properties found</p>
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map((property) => (
-                  <TableRow key={property.id} className="group">
+                  <TableRow key={property.id || property.slug} className="group">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        {property.images?.length > 0 ? (
-                          <img src={property.images[0]} alt={property.title} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                        {getImage(property) ? (
+                          <img src={getImage(property)!} alt={property.title} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
                         ) : (
                           <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><Eye className="h-4 w-4 text-gray-400" /></div>
                         )}
@@ -174,12 +165,12 @@ export default function PropertyList() {
                     </TableCell>
                     <TableCell className="text-sm text-gray-600">{property.location}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{property.property_type}</Badge></TableCell>
-                    <TableCell className="text-sm font-medium">{property.price_display || `AED ${property.price?.toLocaleString()}`}</TableCell>
+                    <TableCell className="text-sm font-medium">{property.price ? `AED ${Number(property.price).toLocaleString()}` : "-"}</TableCell>
                     <TableCell>{statusBadge(property.status)}</TableCell>
-                    <TableCell className="text-center">{property.featured && <Star className="h-4 w-4 text-[#C9A84C] mx-auto fill-[#C9A84C]" />}</TableCell>
+                    <TableCell className="text-center">{isFeatured(property) && <Star className="h-4 w-4 text-[#C9A84C] mx-auto fill-[#C9A84C]" />}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link to={`/properties/${property.id}`}><Button size="icon" variant="ghost" className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button></Link>
+                        <Link to={`/properties/${property.id || property.slug}`}><Button size="icon" variant="ghost" className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button></Link>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50"><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -187,7 +178,7 @@ export default function PropertyList() {
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Property</AlertDialogTitle>
-                              <AlertDialogDescription>Are you sure you want to delete "{property.title}"? This cannot be undone.</AlertDialogDescription>
+                              <AlertDialogDescription>Delete "{property.title}"? This cannot be undone.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
