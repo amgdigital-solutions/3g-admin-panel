@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { trpc } from "@/providers/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,13 +28,58 @@ const quickActions = [
   { label: "View Downloads", path: "/download-requests", icon: Download, color: "bg-violet-600" },
 ];
 
+interface Stats {
+  totalProperties: number;
+  totalBlogPosts: number;
+  totalCommunities: number;
+  totalDownloads: number;
+  featuredCount: number;
+}
+
+async function fetchJson(url: string) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 export default function Dashboard() {
-  const { data: stats, isLoading } = trpc.stats.get.useQuery();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [publishing, setPublishing] = useState<string | null>(null);
   const [publishStatus, setPublishStatus] = useState<{
     message: string;
     success: boolean;
   } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const [properties, blogs, communities, downloads] = await Promise.all([
+        fetchJson("/api/cms/properties"),
+        fetchJson("/api/cms/blogs"),
+        fetchJson("/api/cms/communities"),
+        fetchJson("/api/download-requests"),
+      ]);
+      if (cancelled) return;
+      const featured = (Array.isArray(properties) ? properties : []).filter(
+        (p: any) => p.featured
+      ).length;
+      setStats({
+        totalProperties: Array.isArray(properties) ? properties.length : 0,
+        totalBlogPosts: Array.isArray(blogs) ? blogs.length : 0,
+        totalCommunities: Array.isArray(communities) ? communities.length : 0,
+        totalDownloads: Array.isArray(downloads) ? downloads.length : 0,
+        featuredCount: featured,
+      });
+      setIsLoading(false);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (publishStatus) {

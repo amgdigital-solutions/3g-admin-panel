@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,19 +10,73 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { PROPERTY_STATUS, PROPERTY_TYPES } from "@/types";
 import { Plus, Search, Pencil, Trash2, Star, Eye } from "lucide-react";
 
+interface Property {
+  id: string;
+  slug: string;
+  title: string;
+  location: string;
+  property_type: string;
+  price: number;
+  price_display?: string;
+  status: string;
+  featured: boolean;
+  images?: string[];
+}
+
+async function fetchProperties(): Promise<Property[]> {
+  try {
+    const res = await fetch("/api/cms/properties");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function deleteProperty(slug: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/cms/properties/${slug}`, { method: "DELETE" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function PropertyList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
 
-  const utils = trpc.useUtils();
-  const { data: properties, isLoading } = trpc.properties.list.useQuery();
-  const deleteMutation = trpc.properties.delete.useMutation({
-    onSuccess: () => utils.properties.list.invalidate(),
-  });
+  const load = async () => {
+    setIsLoading(true);
+    const data = await fetchProperties();
+    setProperties(data);
+    setIsLoading(false);
+  };
 
-  const filtered = (properties ?? []).filter((p) => {
-    const matchesSearch = search === "" || p.title.toLowerCase().includes(search.toLowerCase()) || p.location.toLowerCase().includes(search.toLowerCase()) || p.slug.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleDelete = async (slug: string) => {
+    setDeletingSlug(slug);
+    const ok = await deleteProperty(slug);
+    if (ok) {
+      setProperties((prev) => prev.filter((p) => p.slug !== slug));
+    }
+    setDeletingSlug(null);
+  };
+
+  const filtered = properties.filter((p) => {
+    const matchesSearch =
+      search === "" ||
+      p.title.toLowerCase().includes(search.toLowerCase()) ||
+      p.location.toLowerCase().includes(search.toLowerCase()) ||
+      p.slug.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     const matchesType = typeFilter === "all" || p.property_type === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
@@ -31,10 +84,14 @@ export default function PropertyList() {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case "published": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
-      case "draft": return <Badge variant="secondary">Draft</Badge>;
-      case "sold_out": return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Sold Out</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
+      case "published":
+        return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
+      case "draft":
+        return <Badge variant="secondary">Draft</Badge>;
+      case "sold_out":
+        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Sold Out</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -134,7 +191,9 @@ export default function PropertyList() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteMutation.mutate({ id: property.id })} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                              <AlertDialogAction onClick={() => handleDelete(property.slug)} disabled={deletingSlug === property.slug} className="bg-red-600 hover:bg-red-700">
+                                {deletingSlug === property.slug ? "Deleting..." : "Delete"}
+                              </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>

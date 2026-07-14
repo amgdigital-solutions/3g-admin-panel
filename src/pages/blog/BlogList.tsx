@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,19 +10,70 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { BLOG_CATEGORIES, BLOG_STATUS } from "@/types";
 import { Plus, Search, Pencil, Trash2, FileText } from "lucide-react";
 
+interface BlogPost {
+  id: string;
+  slug: string;
+  title: string;
+  category: string;
+  author_name: string;
+  status: string;
+  featured_image?: string;
+}
+
+async function fetchPosts(): Promise<BlogPost[]> {
+  try {
+    const res = await fetch("/api/cms/blogs");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function deletePost(slug: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/cms/blogs/${slug}`, { method: "DELETE" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function BlogList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
 
-  const utils = trpc.useUtils();
-  const { data: posts, isLoading } = trpc.blogPosts.list.useQuery();
-  const deleteMutation = trpc.blogPosts.delete.useMutation({
-    onSuccess: () => utils.blogPosts.list.invalidate(),
-  });
+  const load = async () => {
+    setIsLoading(true);
+    const data = await fetchPosts();
+    setPosts(data);
+    setIsLoading(false);
+  };
 
-  const filtered = (posts ?? []).filter((p) => {
-    const matchesSearch = search === "" || p.title.toLowerCase().includes(search.toLowerCase()) || p.slug.toLowerCase().includes(search.toLowerCase()) || p.category?.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleDelete = async (slug: string) => {
+    setDeletingSlug(slug);
+    const ok = await deletePost(slug);
+    if (ok) {
+      setPosts((prev) => prev.filter((p) => p.slug !== slug));
+    }
+    setDeletingSlug(null);
+  };
+
+  const filtered = posts.filter((p) => {
+    const matchesSearch =
+      search === "" ||
+      p.title.toLowerCase().includes(search.toLowerCase()) ||
+      p.slug.toLowerCase().includes(search.toLowerCase()) ||
+      p.category?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || p.category === categoryFilter;
     return matchesSearch && matchesStatus && matchesCategory;
@@ -31,9 +81,12 @@ export default function BlogList() {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case "published": return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
-      case "draft": return <Badge variant="secondary">Draft</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
+      case "published":
+        return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>;
+      case "draft":
+        return <Badge variant="secondary">Draft</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -126,7 +179,9 @@ export default function BlogList() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteMutation.mutate({ id: post.id })} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                              <AlertDialogAction onClick={() => handleDelete(post.slug)} disabled={deletingSlug === post.slug} className="bg-red-600 hover:bg-red-700">
+                                {deletingSlug === post.slug ? "Deleting..." : "Delete"}
+                              </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
