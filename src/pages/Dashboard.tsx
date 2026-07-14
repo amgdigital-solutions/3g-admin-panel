@@ -59,9 +59,9 @@ export default function Dashboard() {
     let cancelled = false;
     async function load() {
       const [properties, blogs, communities, downloads] = await Promise.all([
-        fetchJson("/api/cms/properties"),
-        fetchJson("/api/cms/blogs"),
-        fetchJson("/api/cms/communities"),
+        fetchJson("/api/properties"),
+        fetchJson("/api/blogs"),
+        fetchJson("/api/communities"),
         fetchJson("/api/download-requests"),
       ]);
       if (cancelled) return;
