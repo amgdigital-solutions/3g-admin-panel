@@ -25,7 +25,7 @@ interface Property {
 
 async function fetchProperties(): Promise<Property[]> {
   try {
-    const res = await fetch("/api/cms/properties");
+    const res = await fetch("/api/properties");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return Array.isArray(data) ? data : [];
@@ -36,7 +36,7 @@ async function fetchProperties(): Promise<Property[]> {
 
 async function deleteProperty(slug: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/cms/properties/${slug}`, { method: "DELETE" });
+    const res = await fetch(`/api/properties/${slug}`, { method: "DELETE" });
     return res.ok;
   } catch {
     return false;
