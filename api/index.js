@@ -95,7 +95,7 @@ function verifyToken(token) {
 }
 
 // ── Request Handler ───────────────────────────────────────────────
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
     res.writeHead(204, cors); res.end(); return;
   }
@@ -339,6 +339,26 @@ module.exports = async (req, res) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  DOWNLOAD REQUESTS (Leads)
+    // ═══════════════════════════════════════════════════════════════
+
+    if (url.startsWith("/api/download-requests") && req.method === "GET") {
+      const urlObj = new URL(url, `http://localhost`);
+      const action = urlObj.searchParams.get("action") || "list";
+      if (action === "list") {
+        const data = await supabaseGet("download_requests", "?order=created_at.desc");
+        const mapped = (data || []).map(row => ({
+          id: String(row.id), name: row.name || "", email: row.email || "",
+          phone: row.phone || "", interest: row.interest || "",
+          source: row.source || "Website", status: row.status || "new",
+          createdAt: row.created_at,
+        }));
+        res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: mapped })); return;
+      }
+      res.writeHead(400, cors); res.end(JSON.stringify({ error: "Unknown action" })); return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  ADMIN AUTH
     // ═══════════════════════════════════════════════════════════════
 
@@ -420,4 +440,4 @@ module.exports = async (req, res) => {
     res.writeHead(500, cors);
     res.end(JSON.stringify({ error: err.message }));
   }
-};
+}
