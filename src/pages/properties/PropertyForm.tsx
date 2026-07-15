@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import TiptapEditor from "@/components/editor/TiptapEditor";
 import ImageUpload, { GalleryUpload } from "@/components/ImageUpload";
 import { PROPERTY_TYPES, PROPERTY_STATUS, COMMON_AMENITIES } from "@/types";
@@ -67,27 +68,29 @@ export default function PropertyForm() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const payload = {
-        ...form,
-        show_in_hero: form.featured,
-      };
-      if (isEditing && id) {
-        await fetch(`/api/cms/properties/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetch("/api/cms/properties", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      const payload = { ...form, show_in_hero: form.featured };
+      const url = isEditing && id ? `/api/cms/properties/${id}` : "/api/cms/properties";
+      const method = isEditing && id ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || json.success === false) {
+        toast.error(json.error || `Failed to ${isEditing ? "update" : "create"} property`);
+        setIsSubmitting(false);
+        return;
       }
+
+      toast.success(isEditing ? "Property updated successfully!" : "Property created successfully!");
       navigate("/properties");
     } catch (err) {
       console.error("[PropertyForm] Submit error:", err);
-    } finally {
+      toast.error("Network error. Please try again.");
       setIsSubmitting(false);
     }
   };
