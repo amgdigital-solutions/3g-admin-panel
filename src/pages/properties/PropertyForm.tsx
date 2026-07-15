@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
-import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,37 +21,73 @@ const emptyForm = {
   meta_title: "", meta_description: "", focus_keywords: "", faqs: [] as FAQ[],
 };
 
+async function fetchItem(url: string) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) { console.error(`[PropertyForm] API error ${res.status}`); return null; }
+    const json = await res.json();
+    return json.data || null;
+  } catch (err) { console.error(`[PropertyForm] Fetch error:`, err); return null; }
+}
+
 export default function PropertyForm() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEditing = !!id;
-  const utils = trpc.useUtils();
-  const { data: existing } = trpc.properties.getById.useQuery({ id: id! }, { enabled: isEditing });
   const [form, setForm] = useState(emptyForm);
+  const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newImageUrl, setNewImageUrl] = useState("");
   const [newAmenity, setNewAmenity] = useState("");
   const [newFaq, setNewFaq] = useState<FAQ>({ q: "", a: "" });
   const [activeTab, setActiveTab] = useState("basic");
 
   useEffect(() => {
-    if (existing) {
-      setForm({
-        title: existing.title || "", slug: existing.slug || "", description: existing.description || "",
-        barcode: existing.barcode || "", price: existing.price || 0, price_display: existing.price_display || "",
-        location: existing.location || "", property_type: existing.property_type || "Apartment",
-        status: (existing.status as "draft" | "published" | "sold_out") || "draft", bedrooms: existing.bedrooms || 0,
-        bathrooms: existing.bathrooms || 0, area_sqft: existing.area_sqft || 0, parking: existing.parking || 0,
-        featured: existing.featured || false, images: existing.images || [], amenities: existing.amenities || [],
-        meta_title: existing.meta_title || "", meta_description: existing.meta_description || "",
-        focus_keywords: existing.focus_keywords || "", faqs: (existing.faqs as FAQ[]) || [],
+    if (isEditing && id) {
+      setIsLoading(true);
+      fetchItem(`/api/cms/properties/${id}`).then((data) => {
+        if (data) {
+          setForm({
+            title: data.title || "", slug: data.slug || "", description: data.description || data.content || "",
+            barcode: data.barcode || "", price: data.price || 0, price_display: data.price_display || "",
+            location: data.location || "", property_type: data.property_type || data.category || "Apartment",
+            status: (data.status as "draft" | "published" | "sold_out") || "draft", bedrooms: data.bedrooms || 0,
+            bathrooms: data.bathrooms || 0, area_sqft: data.area_sqft || 0, parking: data.parking || 0,
+            featured: data.showInHero || data.show_in_hero || false, images: data.images || [], amenities: data.amenities || [],
+            meta_title: data.meta_title || "", meta_description: data.meta_description || "",
+            focus_keywords: data.focus_keywords || "", faqs: (data.faqs as FAQ[]) || [],
+          });
+        }
+        setIsLoading(false);
       });
     }
-  }, [existing]);
+  }, [id, isEditing]);
 
-  const createMutation = trpc.properties.create.useMutation({ onSuccess: () => { utils.properties.list.invalidate(); navigate("/properties"); } });
-  const updateMutation = trpc.properties.update.useMutation({ onSuccess: () => { utils.properties.list.invalidate(); navigate("/properties"); } });
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); isEditing && id ? updateMutation.mutate({ id, ...form }) : createMutation.mutate(form); };
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      if (isEditing && id) {
+        await fetch(`/api/cms/properties/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/cms/properties", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      navigate("/properties");
+    } catch (err) {
+      console.error("[PropertyForm] Submit error:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const addImage = () => { if (newImageUrl.trim()) { setForm(f => ({ ...f, images: [...f.images, newImageUrl.trim()] })); setNewImageUrl(""); } };
   const removeImage = (idx: number) => setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
   const toggleAmenity = (amenity: string) => setForm(f => ({ ...f, amenities: f.amenities.includes(amenity) ? f.amenities.filter(a => a !== amenity) : [...f.amenities, amenity] }));
@@ -61,6 +96,22 @@ export default function PropertyForm() {
   const removeFaq = (idx: number) => setForm(f => ({ ...f, faqs: f.faqs.filter((_, i) => i !== idx) }));
   const updateField = (field: string, value: unknown) => setForm(f => ({ ...f, [field]: value }));
   const generateSlug = (title: string) => title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").substring(0, 60);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/properties")}><ArrowLeft className="h-5 w-5" /></Button>
+          <div><h1 className="text-2xl font-bold text-[#1E3A5F]">Loading...</h1></div>
+        </div>
+        <div className="bg-white rounded-lg border p-6 space-y-4 animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
