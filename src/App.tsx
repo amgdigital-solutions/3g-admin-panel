@@ -10,6 +10,7 @@ import BlogForm from "@/pages/blog/BlogForm";
 import CommunityList from "@/pages/communities/CommunityList";
 import CommunityForm from "@/pages/communities/CommunityForm";
 import DownloadRequestList from "@/pages/downloads/DownloadRequestList";
+import SiteSettings from "@/pages/SiteSettings";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
       <Route path="/communities/new" element={<ProtectedRoute><CommunityForm /></ProtectedRoute>} />
       <Route path="/communities/:id" element={<ProtectedRoute><CommunityForm /></ProtectedRoute>} />
       <Route path="/download-requests" element={<ProtectedRoute><DownloadRequestList /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><SiteSettings /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
