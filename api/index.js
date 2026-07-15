@@ -63,6 +63,33 @@ async function supabaseRequest(table, method, query, body) {
   return text ? JSON.parse(text) : [];
 }
 
+// Retry helper: if Supabase complains about a missing column, remove it and retry
+async function safeUpsert(table, method, query, mappedBody, maxRetries = 5) {
+  let body = { ...mappedBody };
+  let lastError;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await supabaseRequest(table, method, query, body);
+    } catch (err) {
+      lastError = err;
+      // Extract column name from error like: "Could not find the 'featured_image' column"
+      const colMatch = err.supabaseMessage?.match(/Could not find the '([^']+)' column/);
+      if (colMatch) {
+        const badCol = colMatch[1];
+        if (body[badCol] !== undefined) {
+          console.log(`[API] Column '${badCol}' not found in ${table}, removing and retrying...`);
+          delete body[badCol];
+          continue; // retry without this column
+        }
+      }
+      // If error is not about missing column, or column already removed, throw
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 const ADMIN_USERS = [
   { id: "admin-1", username: "admin", name: "Admin", email: "admin@3guae.com", role: "super_admin", password: "admin123" },
   { id: "admin-2", username: "qasim", name: "Qasim", email: "qasim@3guae.com", role: "super_admin", password: "qasim@3g123" },
@@ -77,54 +104,63 @@ function mapProperty(body) {
   const images = body.images || [];
   const featuredImage = body.coverImage || body.featured_image || images[0] || "";
   const status = body.status || body.publishStatus || "draft";
-  const mapped = {
-    title: body.title || "",
-    slug: body.slug || "",
-    description: body.description || body.content || "",
-    short_description: body.excerpt || body.short_description || (body.description || "").substring(0, 200),
-    featured_image: featuredImage,
-    is_published: status === "published" || status === true,
-    property_category: body.property_type || body.category || "Apartment",
-    location: body.location || "",
-    price: body.price || 0,
-    price_display: body.price_display || "",
-    bedrooms: body.bedrooms || 0,
-    bathrooms: body.bathrooms || 0,
-    listing_type: body.listingType || body.listing_type || "normal",
-    sold_out: body.soldOut || body.sold_out || false,
-    hidden: body.hidden || false,
-    show_in_hero: body.showInHero || body.show_in_hero || body.featured || false,
-    is_new_launch: body.isNewLaunch || body.is_new_launch || false,
-    golden_visa_eligible: body.goldenVisaEligible || body.golden_visa_eligible || false,
-    barcode: body.barcode || "",
-    area_sqft: body.area_sqft || 0,
-    parking: body.parking || 0,
-    amenities: body.amenities || [],
-    meta_title: body.meta_title || "",
-    meta_description: body.meta_description || "",
-    focus_keywords: body.focus_keywords || "",
-    faqs: body.faqs || [],
-  };
-  // Only include developer_name if user has this column in their Supabase table
-  if (body.developer || body.developer_name) {
-    mapped.developer_name = body.developer || body.developer_name;
-  }
+  const mapped = {};
+
+  // Core fields
+  if (body.title !== undefined) mapped.title = body.title;
+  if (body.slug !== undefined) mapped.slug = body.slug;
+  if (body.description !== undefined || body.content !== undefined) mapped.description = body.description || body.content || "";
+  if (body.excerpt !== undefined || body.short_description !== undefined) mapped.short_description = body.excerpt || body.short_description || "";
+
+  // Images - only if there's an actual URL
+  if (featuredImage) mapped.featured_image = featuredImage;
+  if (images.length > 0) mapped.images = images;
+
+  // Status & flags
+  mapped.is_published = status === "published" || status === true;
+  if (body.property_type || body.category) mapped.property_category = body.property_type || body.category || "Apartment";
+  if (body.location !== undefined) mapped.location = body.location;
+  if (body.price !== undefined) mapped.price = body.price;
+  if (body.price_display !== undefined) mapped.price_display = body.price_display;
+  if (body.bedrooms !== undefined) mapped.bedrooms = body.bedrooms;
+  if (body.bathrooms !== undefined) mapped.bathrooms = body.bathrooms;
+
+  // Developer - only if provided
+  if (body.developer || body.developer_name) mapped.developer_name = body.developer || body.developer_name;
+
+  // Optional flags - only if truthy
+  if (body.listingType || body.listing_type) mapped.listing_type = body.listingType || body.listing_type;
+  if (body.soldOut || body.sold_out) mapped.sold_out = true;
+  if (body.hidden) mapped.hidden = true;
+  if (body.showInHero || body.show_in_hero || body.featured) mapped.show_in_hero = true;
+  if (body.isNewLaunch || body.is_new_launch) mapped.is_new_launch = true;
+  if (body.goldenVisaEligible || body.golden_visa_eligible) mapped.golden_visa_eligible = true;
+
+  // Optional metadata - only if provided
+  if (body.barcode) mapped.barcode = body.barcode;
+  if (body.area_sqft !== undefined) mapped.area_sqft = body.area_sqft;
+  if (body.parking !== undefined) mapped.parking = body.parking;
+  if (body.amenities?.length) mapped.amenities = body.amenities;
+  if (body.meta_title) mapped.meta_title = body.meta_title;
+  if (body.meta_description) mapped.meta_description = body.meta_description;
+  if (body.focus_keywords) mapped.focus_keywords = body.focus_keywords;
+  if (body.faqs?.length) mapped.faqs = body.faqs;
+
   return mapped;
 }
 
 function mapBlog(body, isCreate) {
   const status = body.status || "draft";
-  const data = {
-    title: body.title || "",
-    slug: body.slug || "",
-    excerpt: body.excerpt || "",
-    content: body.content || "",
-    category: body.category || "",
-    tags: body.tags || [],
-    featured_image: body.coverImage || body.featured_image || "",
-    status: status,
-    author: body.author_name || body.author || "3G Real Estate",
-  };
+  const data = {};
+  if (body.title !== undefined) data.title = body.title;
+  if (body.slug !== undefined) data.slug = body.slug;
+  if (body.excerpt !== undefined) data.excerpt = body.excerpt;
+  if (body.content !== undefined) data.content = body.content;
+  if (body.category !== undefined) data.category = body.category;
+  if (body.tags?.length) data.tags = body.tags;
+  if (body.coverImage || body.featured_image) data.featured_image = body.coverImage || body.featured_image;
+  if (status) data.status = status;
+  if (body.author_name || body.author) data.author = body.author_name || body.author || "3G Real Estate";
   if (isCreate && status === "published") {
     data.published_at = new Date().toISOString();
   }
@@ -133,24 +169,24 @@ function mapBlog(body, isCreate) {
 
 function mapCommunity(body) {
   const status = body.status || "draft";
-  return {
-    name: body.name || "",
-    slug: body.slug || "",
-    description: body.description || "",
-    short_description: body.short_description || (body.description || "").substring(0, 200),
-    long_description: body.longDescription || body.long_description || body.description || "",
-    location: body.location || "",
-    price_range: body.priceRange || body.price_range || body.avg_price || "",
-    avg_price_per_sqft: body.avgPricePerSqft || body.avg_price_per_sqft || "",
-    rental_yield: body.rentalYield || body.rental_yield || "",
-    property_types: body.propertyTypes || body.property_types || [],
-    developer: body.developer || "",
-    image: body.image || "",
-    gallery: body.gallery || [],
-    is_published: status === "published" || body.isPublished === true,
-    category: body.category || "",
-    amenities: body.amenities || [],
-  };
+  const data = {};
+  if (body.name !== undefined) data.name = body.name;
+  if (body.slug !== undefined) data.slug = body.slug;
+  if (body.description !== undefined) data.description = body.description;
+  if (body.short_description !== undefined) data.short_description = body.short_description;
+  if (body.longDescription || body.long_description) data.long_description = body.longDescription || body.long_description;
+  if (body.location !== undefined) data.location = body.location;
+  if (body.priceRange || body.price_range) data.price_range = body.priceRange || body.price_range;
+  if (body.avgPricePerSqft || body.avg_price_per_sqft) data.avg_price_per_sqft = body.avgPricePerSqft || body.avg_price_per_sqft;
+  if (body.rentalYield || body.rental_yield) data.rental_yield = body.rentalYield || body.rental_yield;
+  if (body.propertyTypes?.length || body.property_types?.length) data.property_types = body.propertyTypes || body.property_types;
+  if (body.developer) data.developer = body.developer;
+  if (body.image) data.image = body.image;
+  if (body.gallery?.length) data.gallery = body.gallery;
+  data.is_published = status === "published" || body.isPublished === true;
+  if (body.category !== undefined) data.category = body.category;
+  if (body.amenities?.length) data.amenities = body.amenities;
+  return data;
 }
 
 async function safeDbCall(req, res, operation) {
@@ -205,13 +241,13 @@ export default async function handler(req, res) {
     if (url === "/api/properties" && req.method === "POST") {
       const body = await parseBody(req);
       if (!body.slug && body.title) body.slug = generateSlug(body.title);
-      const result = await supabaseRequest("listed_properties", "POST", "", mapProperty(body));
+      const result = await safeUpsert("listed_properties", "POST", "", mapProperty(body));
       res.writeHead(201, cors); res.end(JSON.stringify({ result: { data: result?.[0], success: true } })); return;
     }
 
     if (propertyId && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await supabaseRequest("listed_properties", "PATCH", `?id=eq.${propertyId}`, mapProperty(body));
+      const result = await safeUpsert("listed_properties", "PATCH", `?id=eq.${propertyId}`, mapProperty(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ result: { data: result?.[0], success: true } })); return;
     }
 
@@ -277,13 +313,13 @@ export default async function handler(req, res) {
     if (url === "/api/cms/properties" && req.method === "POST") {
       const body = await parseBody(req);
       if (!body.slug && body.title) body.slug = generateSlug(body.title);
-      const result = await supabaseRequest("listed_properties", "POST", "", mapProperty(body));
+      const result = await safeUpsert("listed_properties", "POST", "", mapProperty(body));
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
     if (cmsPropSlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await supabaseRequest("listed_properties", "PATCH", `?slug=eq.${cmsPropSlug}`, mapProperty(body));
+      const result = await safeUpsert("listed_properties", "PATCH", `?slug=eq.${cmsPropSlug}`, mapProperty(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
@@ -323,13 +359,13 @@ export default async function handler(req, res) {
 
     if (url === "/api/cms/blogs" && req.method === "POST") {
       const body = await parseBody(req);
-      const result = await supabaseRequest("blog_posts", "POST", "", mapBlog(body, true));
+      const result = await safeUpsert("blog_posts", "POST", "", mapBlog(body, true));
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
     if (blogSlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await supabaseRequest("blog_posts", "PATCH", `?slug=eq.${blogSlug}`, mapBlog(body));
+      const result = await safeUpsert("blog_posts", "PATCH", `?slug=eq.${blogSlug}`, mapBlog(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
@@ -371,13 +407,13 @@ export default async function handler(req, res) {
 
     if (url === "/api/cms/communities" && req.method === "POST") {
       const body = await parseBody(req);
-      const result = await supabaseRequest("communities", "POST", "", mapCommunity(body));
+      const result = await safeUpsert("communities", "POST", "", mapCommunity(body));
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
     if (communitySlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await supabaseRequest("communities", "PATCH", `?slug=eq.${communitySlug}`, mapCommunity(body));
+      const result = await safeUpsert("communities", "PATCH", `?slug=eq.${communitySlug}`, mapCommunity(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
