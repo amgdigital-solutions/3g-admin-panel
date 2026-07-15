@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ImageUpload, { GalleryUpload } from "@/components/ImageUpload";
 import { PROPERTY_TYPES, COMMUNITY_STATUS, COMMON_AMENITIES } from "@/types";
 import { ArrowLeft, Plus, X, Save } from "lucide-react";
 
@@ -27,7 +28,6 @@ export default function CommunityForm() {
   const [form, setForm] = useState(emptyForm);
   const [isLoading, setIsLoading] = useState(isEditing);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newGalleryUrl, setNewGalleryUrl] = useState("");
 
   useEffect(() => {
     if (isEditing && id) {
@@ -77,8 +77,6 @@ export default function CommunityForm() {
   };
 
   const updateField = (field: string, value: unknown) => setForm((f) => ({ ...f, [field]: value }));
-  const addGalleryImage = () => { if (newGalleryUrl.trim()) { setForm((f) => ({ ...f, gallery: [...f.gallery, newGalleryUrl.trim()] })); setNewGalleryUrl(""); } };
-  const removeGalleryImage = (idx: number) => setForm((f) => ({ ...f, gallery: f.gallery.filter((_, i) => i !== idx) }));
   const togglePropertyType = (type: string) => setForm((f) => ({ ...f, property_types: f.property_types.includes(type) ? f.property_types.filter((t) => t !== type) : [...f.property_types, type] }));
   const toggleAmenity = (amenity: string) => setForm((f) => ({ ...f, amenities: f.amenities.includes(amenity) ? f.amenities.filter((a) => a !== amenity) : [...f.amenities, amenity] }));
   const generateSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").substring(0, 60);
@@ -117,15 +115,25 @@ export default function CommunityForm() {
                 <div className="space-y-2"><Label>Location</Label><Input value={form.location} onChange={(e) => updateField("location", e.target.value)} placeholder="e.g. Dubai Marina" /></div>
                 <div className="space-y-2"><Label>Average Price Range</Label><Input value={form.avg_price} onChange={(e) => updateField("avg_price", e.target.value)} placeholder="e.g. AED 1.2M - 5M" /></div>
                 <div className="space-y-2"><Label>Status</Label><Select value={form.status} onValueChange={(v) => updateField("status", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COMMUNITY_STATUS.map((s) => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}</SelectContent></Select></div>
-                <div className="space-y-2"><Label>Hero Image URL</Label><Input value={form.image} onChange={(e) => updateField("image", e.target.value)} placeholder="https://..." /></div>
+                <div className="space-y-2 md:col-span-2">
+                  <ImageUpload
+                    value={form.image}
+                    onChange={(url) => updateField("image", url)}
+                    type="communities"
+                    label="Hero Image"
+                  />
+                </div>
               </div>
             </div>
           </TabsContent>
           <TabsContent value="media" className="space-y-4">
             <div className="bg-white rounded-lg border p-6 space-y-6">
-              <div className="space-y-3"><Label>Photo Gallery</Label><div className="flex gap-2"><Input value={newGalleryUrl} onChange={(e) => setNewGalleryUrl(e.target.value)} placeholder="Paste image URL..." onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addGalleryImage())} /><Button type="button" onClick={addGalleryImage} variant="outline"><Plus className="h-4 w-4" /></Button></div>
-                {form.gallery.length > 0 ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{form.gallery.map((url, idx) => (<div key={idx} className="relative group"><img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-24 object-cover rounded-lg" onError={(e) => { (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='80'%3E%3Crect fill='%23f3f4f6' width='100' height='80'/%3E%3Ctext fill='%239ca3af' x='50' y='40' text-anchor='middle' font-size='10'%3EInvalid URL%3C/text%3E%3C/svg%3E"; }} /><button type="button" onClick={() => removeGalleryImage(idx)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button></div>))}</div> : <p className="text-sm text-gray-400 py-4 text-center border-2 border-dashed rounded-lg">No gallery images added yet</p>}
-              </div>
+              <GalleryUpload
+                images={form.gallery}
+                onChange={(urls) => updateField("gallery", urls)}
+                type="communities"
+                label="Photo Gallery"
+              />
               <div className="space-y-3"><Label>Property Types Available</Label><div className="flex flex-wrap gap-2">{PROPERTY_TYPES.map((type) => (<button key={type} type="button" onClick={() => togglePropertyType(type)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${form.property_types.includes(type) ? "bg-[#1E3A5F] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{type}</button>))}</div></div>
               <div className="space-y-3"><Label>Community Amenities</Label><div className="flex flex-wrap gap-2">{COMMON_AMENITIES.map((amenity) => (<button key={amenity} type="button" onClick={() => toggleAmenity(amenity)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${form.amenities.includes(amenity) ? "bg-emerald-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{amenity}</button>))}</div></div>
             </div>

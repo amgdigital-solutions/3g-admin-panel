@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import TiptapEditor from "@/components/editor/TiptapEditor";
+import ImageUpload, { GalleryUpload } from "@/components/ImageUpload";
 import { PROPERTY_TYPES, PROPERTY_STATUS, COMMON_AMENITIES } from "@/types";
 import { ArrowLeft, Plus, X, Save, Barcode } from "lucide-react";
 
@@ -37,7 +38,6 @@ export default function PropertyForm() {
   const [form, setForm] = useState(emptyForm);
   const [isLoading, setIsLoading] = useState(isEditing);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newImageUrl, setNewImageUrl] = useState("");
   const [newAmenity, setNewAmenity] = useState("");
   const [newFaq, setNewFaq] = useState<FAQ>({ q: "", a: "" });
   const [activeTab, setActiveTab] = useState("basic");
@@ -67,17 +67,21 @@ export default function PropertyForm() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const payload = {
+        ...form,
+        show_in_hero: form.featured,
+      };
       if (isEditing && id) {
         await fetch(`/api/cms/properties/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
       } else {
         await fetch("/api/cms/properties", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
       }
       navigate("/properties");
@@ -88,8 +92,6 @@ export default function PropertyForm() {
     }
   };
 
-  const addImage = () => { if (newImageUrl.trim()) { setForm(f => ({ ...f, images: [...f.images, newImageUrl.trim()] })); setNewImageUrl(""); } };
-  const removeImage = (idx: number) => setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
   const toggleAmenity = (amenity: string) => setForm(f => ({ ...f, amenities: f.amenities.includes(amenity) ? f.amenities.filter(a => a !== amenity) : [...f.amenities, amenity] }));
   const addCustomAmenity = () => { if (newAmenity.trim() && !form.amenities.includes(newAmenity.trim())) { setForm(f => ({ ...f, amenities: [...f.amenities, newAmenity.trim()] })); setNewAmenity(""); } };
   const addFaq = () => { if (newFaq.q.trim() && newFaq.a.trim()) { setForm(f => ({ ...f, faqs: [...f.faqs, { ...newFaq }] })); setNewFaq({ q: "", a: "" }); } };
@@ -143,11 +145,13 @@ export default function PropertyForm() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label><Barcode className="h-4 w-4 inline mr-1.5 text-gray-400" />Barcode Image</Label>
-                  <div className="flex gap-2">
-                    <Input value={form.barcode} onChange={e => updateField("barcode", e.target.value)} placeholder="Paste barcode image URL..." />
-                    <Button type="button" variant="outline" onClick={() => form.barcode && window.open(form.barcode, "_blank")} disabled={!form.barcode}>View</Button>
-                  </div>
-                  {form.barcode && <div className="mt-2 p-4 bg-gray-50 rounded-lg border inline-block"><img src={form.barcode} alt="Barcode" className="h-16 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /></div>}
+                  <ImageUpload
+                    value={form.barcode}
+                    onChange={(url) => updateField("barcode", url)}
+                    type="properties"
+                    label="Barcode / QR Code"
+                    folder="barcodes"
+                  />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Description</Label>
@@ -180,23 +184,25 @@ export default function PropertyForm() {
           </TabsContent>
           <TabsContent value="media" className="space-y-4">
             <div className="bg-white rounded-lg border p-6 space-y-6">
-              <div className="space-y-3">
-                <Label>Property Images</Label>
-                <div className="flex gap-2">
-                  <Input value={newImageUrl} onChange={e => setNewImageUrl(e.target.value)} placeholder="Paste image URL..." onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addImage())} />
-                  <Button type="button" onClick={addImage} variant="outline"><Plus className="h-4 w-4" /></Button>
-                </div>
-                {form.images.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {form.images.map((url, idx) => (
-                      <div key={idx} className="relative group">
-                        <img src={url} alt={`Property ${idx + 1}`} className="w-full h-24 object-cover rounded-lg" onError={e => { (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='80'%3E%3Crect fill='%23f3f4f6' width='100' height='80'/%3E%3Ctext fill='%239ca3af' x='50' y='40' text-anchor='middle' font-size='10'%3EInvalid URL%3C/text%3E%3C/svg%3E"; }} />
-                        <button type="button" onClick={() => removeImage(idx)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p className="text-sm text-gray-400 py-4 text-center border-2 border-dashed rounded-lg">No images added yet</p>}
-              </div>
+              <ImageUpload
+                value={form.images[0] || ""}
+                onChange={(url) => {
+                  const imgs = [...form.images];
+                  if (imgs.length === 0) imgs.push(url); else imgs[0] = url;
+                  updateField("images", imgs);
+                }}
+                type="properties"
+                label="Featured Image (Hero)"
+              />
+              <GalleryUpload
+                images={form.images.filter((_, i) => i > 0)}
+                onChange={(galleryUrls) => {
+                  const hero = form.images[0] || "";
+                  updateField("images", hero ? [hero, ...galleryUrls] : galleryUrls);
+                }}
+                type="properties"
+                label="Photo Gallery"
+              />
               <div className="space-y-3">
                 <Label>Amenities</Label>
                 <div className="flex flex-wrap gap-2">

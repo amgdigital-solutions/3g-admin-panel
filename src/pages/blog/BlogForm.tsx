@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TiptapEditor from "@/components/editor/TiptapEditor";
+import ImageUpload from "@/components/ImageUpload";
 import { BLOG_CATEGORIES, BLOG_STATUS } from "@/types";
 import { ArrowLeft, Plus, X, Save } from "lucide-react";
 
@@ -150,15 +151,17 @@ export default function BlogForm() {
                     <SelectContent>{BLOG_STATUS.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Featured Image URL</Label>
-                  <Input value={form.featured_image} onChange={e => updateField("featured_image", e.target.value)} placeholder="https://..." />
-                </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Excerpt</Label>
                   <Textarea value={form.excerpt} onChange={e => updateField("excerpt", e.target.value)} placeholder="Short summary for blog cards" rows={2} />
                 </div>
               </div>
+              <ImageUpload
+                value={form.featured_image}
+                onChange={(url) => updateField("featured_image", url)}
+                type="blogs"
+                label="Featured Image"
+              />
               <div className="space-y-2">
                 <Label>Tags</Label>
                 <div className="flex gap-2">
