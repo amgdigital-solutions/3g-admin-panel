@@ -1,43 +1,102 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
-import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { PROPERTY_TYPES, COMMUNITY_STATUS, COMMON_AMENITIES } from "@/types";
 import { ArrowLeft, Plus, X, Save } from "lucide-react";
 
 const emptyForm = { name: "", slug: "", description: "", short_description: "", image: "", gallery: [] as string[], location: "", avg_price: "", property_types: [] as string[], amenities: [] as string[], meta_title: "", meta_description: "", status: "draft" as const };
 
+async function fetchItem(url: string) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) { console.error(`[CommunityForm] API error ${res.status}`); return null; }
+    const json = await res.json();
+    return json.data || null;
+  } catch (err) { console.error(`[CommunityForm] Fetch error:`, err); return null; }
+}
+
 export default function CommunityForm() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEditing = !!id;
-  const utils = trpc.useUtils();
-  const { data: existing } = trpc.communities.getById.useQuery({ id: id! }, { enabled: isEditing });
   const [form, setForm] = useState(emptyForm);
+  const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newGalleryUrl, setNewGalleryUrl] = useState("");
 
   useEffect(() => {
-    if (existing) {
-      setForm({ name: existing.name || "", slug: existing.slug || "", description: existing.description || "", short_description: existing.short_description || "", image: existing.image || "", gallery: existing.gallery || [], location: existing.location || "", avg_price: existing.avg_price || "", property_types: existing.property_types || [], amenities: existing.amenities || [], meta_title: existing.meta_title || "", meta_description: existing.meta_description || "", status: (existing.status as "draft" | "published") || "draft" });
+    if (isEditing && id) {
+      setIsLoading(true);
+      fetchItem(`/api/cms/communities/${id}`).then((data) => {
+        if (data) {
+          setForm({
+            name: data.name || "", slug: data.slug || "",
+            description: data.description || data.longDescription || "",
+            short_description: data.short_description || data.description || "",
+            image: data.image || "", gallery: data.gallery || [],
+            location: data.location || "", avg_price: data.avg_price || data.priceRange || "",
+            property_types: data.property_types || data.propertyTypes || [],
+            amenities: data.amenities || [],
+            meta_title: data.meta_title || "", meta_description: data.meta_description || "",
+            status: (data.status as "draft" | "published") || (data.isPublished ? "published" : "draft"),
+          });
+        }
+        setIsLoading(false);
+      });
     }
-  }, [existing]);
+  }, [id, isEditing]);
 
-  const createMutation = trpc.communities.create.useMutation({ onSuccess: () => { utils.communities.list.invalidate(); navigate("/communities"); } });
-  const updateMutation = trpc.communities.update.useMutation({ onSuccess: () => { utils.communities.list.invalidate(); navigate("/communities"); } });
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); isEditing && id ? updateMutation.mutate({ id, ...form }) : createMutation.mutate(form); };
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      if (isEditing && id) {
+        await fetch(`/api/cms/communities/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/cms/communities", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      navigate("/communities");
+    } catch (err) {
+      console.error("[CommunityForm] Submit error:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const updateField = (field: string, value: unknown) => setForm((f) => ({ ...f, [field]: value }));
   const addGalleryImage = () => { if (newGalleryUrl.trim()) { setForm((f) => ({ ...f, gallery: [...f.gallery, newGalleryUrl.trim()] })); setNewGalleryUrl(""); } };
   const removeGalleryImage = (idx: number) => setForm((f) => ({ ...f, gallery: f.gallery.filter((_, i) => i !== idx) }));
   const togglePropertyType = (type: string) => setForm((f) => ({ ...f, property_types: f.property_types.includes(type) ? f.property_types.filter((t) => t !== type) : [...f.property_types, type] }));
   const toggleAmenity = (amenity: string) => setForm((f) => ({ ...f, amenities: f.amenities.includes(amenity) ? f.amenities.filter((a) => a !== amenity) : [...f.amenities, amenity] }));
   const generateSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").substring(0, 60);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/communities")}><ArrowLeft className="h-5 w-5" /></Button>
+          <div><h1 className="text-2xl font-bold text-[#1E3A5F]">Loading...</h1></div>
+        </div>
+        <div className="bg-white rounded-lg border p-6 space-y-4 animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
