@@ -12,12 +12,12 @@ import { toast } from "sonner";
 import TiptapEditor from "@/components/editor/TiptapEditor";
 import ImageUpload, { GalleryUpload } from "@/components/ImageUpload";
 import { PROPERTY_TYPES, PROPERTY_STATUS, COMMON_AMENITIES } from "@/types";
-import { ArrowLeft, Plus, X, Save, Barcode, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, X, Save, Barcode, AlertCircle, Building2 } from "lucide-react";
 
 interface FAQ { q: string; a: string; }
 
 const emptyForm = {
-  title: "", slug: "", description: "", barcode: "", price: 0, price_display: "", location: "",
+  title: "", slug: "", description: "", barcode: "", developer: "", price: 0, price_display: "", location: "",
   property_type: "Apartment", status: "draft" as const, bedrooms: 0, bathrooms: 0, area_sqft: 0,
   parking: 0, featured: false, images: [] as string[], amenities: [] as string[],
   meta_title: "", meta_description: "", focus_keywords: "", faqs: [] as FAQ[],
@@ -51,7 +51,7 @@ export default function PropertyForm() {
         if (data) {
           setForm({
             title: data.title || "", slug: data.slug || "", description: data.description || data.content || "",
-            barcode: data.barcode || "", price: data.price || 0, price_display: data.price_display || "",
+            barcode: data.barcode || "", developer: data.developer || data.developer_name || "", price: data.price || 0, price_display: data.price_display || "",
             location: data.location || "", property_type: data.property_type || data.category || "Apartment",
             status: (data.status as "draft" | "published" | "sold_out") || "draft", bedrooms: data.bedrooms || 0,
             bathrooms: data.bathrooms || 0, area_sqft: data.area_sqft || 0, parking: data.parking || 0,
@@ -173,6 +173,11 @@ export default function PropertyForm() {
                 <div className="space-y-2 md:col-span-2">
                   <Label>Slug (URL) *</Label>
                   <div className="flex items-center gap-2"><span className="text-sm text-gray-400 whitespace-nowrap">/property/</span><Input value={form.slug} onChange={e => updateField("slug", e.target.value)} placeholder="luxury-2br-dubai-marina" required /></div>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="flex items-center gap-1.5"><Building2 className="h-4 w-4 text-gray-400" />Developer</Label>
+                  <Input value={form.developer} onChange={e => updateField("developer", e.target.value)} placeholder="e.g. Emaar, Damac, Nakheel" />
+                  <p className="text-xs text-gray-400">The developer or builder of this property. Used for search filtering on the frontend.</p>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label><Barcode className="h-4 w-4 inline mr-1.5 text-gray-400" />Barcode Image</Label>
