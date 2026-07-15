@@ -24,19 +24,38 @@ export async function uploadImage(
   const bucket = BUCKETS[type];
 
   if (!supabaseUrl || !supabaseKey) {
-    return { url: '', path: '', error: 'Supabase not configured' };
+    return { url: '', path: '', error: 'Supabase not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.' };
   }
 
   try {
-    // Ensure bucket exists (creates if not)
-    const { data: buckets } = await supabase.storage.listBuckets();
+    // Check if bucket exists
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+
+    if (listError) {
+      return {
+        url: '',
+        path: '',
+        error: `Cannot access Supabase Storage. Please ensure Storage is enabled in your Supabase project and the "${bucket}" bucket exists.`,
+      };
+    }
+
     const exists = buckets?.some(b => b.name === bucket);
+
     if (!exists) {
-      await supabase.storage.createBucket(bucket, {
-        public: true,
-        fileSizeLimit: 10485760, // 10MB
-        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'],
-      });
+      // Try to create the bucket automatically
+      try {
+        await supabase.storage.createBucket(bucket, {
+          public: true,
+          fileSizeLimit: 10485760, // 10MB
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'],
+        });
+      } catch (createErr: any) {
+        return {
+          url: '',
+          path: '',
+          error: `Bucket "${bucket}" not found and auto-creation failed (permission denied).\n\nTo fix this, create the bucket manually:\n1. Go to Supabase Dashboard > Storage\n2. Click "New Bucket"\n3. Name: "${bucket}"\n4. Toggle "Public bucket" ON\n5. Click Save\n6. Go to Policies tab > New Policy\n7. Allowed operation: ALL, Target roles: anon, authenticated\n8. Policy definition: true`,
+        };
+      }
     }
 
     // Generate unique filename
@@ -55,7 +74,7 @@ export async function uploadImage(
 
     if (error) {
       console.error('[Upload] Error:', error);
-      return { url: '', path: '', error: error.message };
+      return { url: '', path: '', error: `Upload failed: ${error.message}` };
     }
 
     // Get public URL
@@ -66,7 +85,7 @@ export async function uploadImage(
     return { url: publicUrl, path: data.path, error: null };
   } catch (err: any) {
     console.error('[Upload] Exception:', err);
-    return { url: '', path: '', error: err.message || 'Upload failed' };
+    return { url: '', path: '', error: err.message || 'Upload failed unexpectedly' };
   }
 }
 
