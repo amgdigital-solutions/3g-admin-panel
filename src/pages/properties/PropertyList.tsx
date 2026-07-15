@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PROPERTY_STATUS, PROPERTY_TYPES } from "@/types";
-import { Plus, Search, Pencil, Trash2, Star, Eye } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Star, Eye, Building2 } from "lucide-react";
 
 interface Property {
   id: string;
@@ -18,6 +18,8 @@ interface Property {
   property_type: string;
   price: number;
   status: string;
+  developer?: string;
+  developer_name?: string;
   show_in_hero?: boolean;
   showInHero?: boolean;
   featured_image?: string;
@@ -46,6 +48,7 @@ export default function PropertyList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [devFilter, setDevFilter] = useState<string>("all");
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
@@ -66,15 +69,23 @@ export default function PropertyList() {
     setDeletingSlug(null);
   };
 
+  // Extract unique developers for filter dropdown
+  const developers = Array.from(new Set(
+    properties.map(p => p.developer || p.developer_name).filter(Boolean)
+  )).sort();
+
   const filtered = properties.filter((p) => {
     const matchesSearch = search === "" ||
       p.title?.toLowerCase().includes(search.toLowerCase()) ||
       p.location?.toLowerCase().includes(search.toLowerCase()) ||
-      p.slug?.toLowerCase().includes(search.toLowerCase());
+      p.slug?.toLowerCase().includes(search.toLowerCase()) ||
+      (p.developer || p.developer_name || "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     const ptype = p.property_type || "";
     const matchesType = typeFilter === "all" || ptype === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
+    const dev = p.developer || p.developer_name || "";
+    const matchesDev = devFilter === "all" || dev === devFilter;
+    return matchesSearch && matchesStatus && matchesType && matchesDev;
   });
 
   const statusBadge = (status: string) => {
@@ -88,6 +99,7 @@ export default function PropertyList() {
 
   const getImage = (p: Property) => p.featured_image || p.coverImage || (p.images?.length ? p.images[0] : null);
   const isFeatured = (p: Property) => p.show_in_hero || p.showInHero;
+  const getDeveloper = (p: Property) => p.developer || p.developer_name || "";
 
   return (
     <div className="space-y-6">
@@ -104,7 +116,7 @@ export default function PropertyList() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input placeholder="Search by title, location, or slug..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Search by title, location, developer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Statuses" /></SelectTrigger>
@@ -120,6 +132,13 @@ export default function PropertyList() {
             {PROPERTY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={devFilter} onValueChange={setDevFilter}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Developers" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Developers</SelectItem>
+            {developers.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
@@ -129,6 +148,7 @@ export default function PropertyList() {
               <TableRow className="bg-gray-50">
                 <TableHead className="font-semibold">Property</TableHead>
                 <TableHead className="font-semibold">Location</TableHead>
+                <TableHead className="font-semibold">Developer</TableHead>
                 <TableHead className="font-semibold">Type</TableHead>
                 <TableHead className="font-semibold">Price</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
@@ -139,11 +159,11 @@ export default function PropertyList() {
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
                 ))
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-gray-400">
+                  <TableCell colSpan={8} className="text-center py-12 text-gray-400">
                     <Eye className="h-8 w-8 mx-auto mb-2 text-gray-300" /><p>No properties found</p>
                   </TableCell>
                 </TableRow>
@@ -164,6 +184,15 @@ export default function PropertyList() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-gray-600">{property.location}</TableCell>
+                    <TableCell>
+                      {getDeveloper(property) ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-gray-50 px-2 py-1 rounded-md">
+                          <Building2 className="h-3 w-3 text-gray-400" />{getDeveloper(property)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                    </TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{property.property_type}</Badge></TableCell>
                     <TableCell className="text-sm font-medium">{property.price ? `AED ${Number(property.price).toLocaleString()}` : "-"}</TableCell>
                     <TableCell>{statusBadge(property.status)}</TableCell>
