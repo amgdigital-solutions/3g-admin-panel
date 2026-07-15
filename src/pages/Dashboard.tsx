@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import ClearCachePanel from "@/components/ClearCachePanel";
 import {
   Building2,
   FileText,
@@ -165,6 +166,12 @@ export default function Dashboard() {
           })}
         </div>
       </div>
+
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-6">
+          <ClearCachePanel />
+        </CardContent>
+      </Card>
 
       <Card className="border-0 shadow-sm bg-[#1E3A5F]">
         <CardHeader className="pb-3">
