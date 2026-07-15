@@ -172,7 +172,9 @@ export default async function handler(req, res) {
     //  CMS PROPERTIES
     // ═══════════════════════════════════════════════════════════════
 
-    if (url.startsWith("/api/cms/properties") && req.method === "GET" && !matchRoute(url, "/api/cms/properties/:slug")) {
+    const cmsPropSlug = matchRoute(url, "/api/cms/properties/:slug");
+
+    if (url.startsWith("/api/cms/properties") && req.method === "GET" && !cmsPropSlug) {
       const data = await supabaseGet("listed_properties", "?order=id.asc");
       const mapped = (data || []).map(row => ({
         _id: String(row.id), title: row.title, slug: row.slug,
@@ -190,6 +192,26 @@ export default async function handler(req, res) {
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: mapped })); return;
     }
 
+    // GET single CMS property by slug
+    if (cmsPropSlug && req.method === "GET") {
+      const data = await supabaseGet("listed_properties", `?slug=eq.${cmsPropSlug}&limit=1`);
+      const row = data?.[0];
+      res.writeHead(200, cors);
+      res.end(JSON.stringify({ success: true, data: row ? {
+        _id: String(row.id), title: row.title, slug: row.slug,
+        excerpt: row.short_description || "", content: row.description || "",
+        coverImage: row.featured_image || "", status: row.is_published ? "published" : "draft",
+        category: row.property_category || "", location: row.location || "",
+        price: row.price || 0, bedrooms: row.bedrooms || "", bathrooms: row.bathrooms || "",
+        developer: row.developer_name || "", listingType: row.listing_type || "normal",
+        soldOut: row.sold_out || false, hidden: row.hidden || false,
+        showInHero: row.show_in_hero || false, isNewLaunch: row.is_new_launch || false,
+        goldenVisaEligible: row.golden_visa_eligible || false,
+        publishStatus: row.is_published ? "published" : "draft",
+        createdAt: row.created_at, updatedAt: row.updated_at, ...row,
+      } : null })); return;
+    }
+
     if (url === "/api/cms/properties" && req.method === "POST") {
       const body = await parseBody(req);
       if (!body.slug && body.title) body.slug = generateSlug(body.title);
@@ -197,14 +219,13 @@ export default async function handler(req, res) {
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: { _id: String(data[0].id), ...data[0] } })); return;
     }
 
-    const cmsSlug = matchRoute(url, "/api/cms/properties/:slug");
-    if (cmsSlug && req.method === "PUT") {
+    if (cmsPropSlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const data = await supabasePatch("listed_properties", `?slug=eq.${cmsSlug}`, body);
+      const data = await supabasePatch("listed_properties", `?slug=eq.${cmsPropSlug}`, body);
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(data[0].id), ...data[0] } })); return;
     }
-    if (cmsSlug && req.method === "DELETE") {
-      await supabaseDelete("listed_properties", `?slug=eq.${cmsSlug}`);
+    if (cmsPropSlug && req.method === "DELETE") {
+      await supabaseDelete("listed_properties", `?slug=eq.${cmsPropSlug}`);
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true })); return;
     }
 
