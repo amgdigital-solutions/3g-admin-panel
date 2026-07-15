@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 import ImageUpload, { GalleryUpload } from "@/components/ImageUpload";
 import { PROPERTY_TYPES, COMMUNITY_STATUS, COMMON_AMENITIES } from "@/types";
 import { ArrowLeft, Plus, X, Save } from "lucide-react";
@@ -55,23 +56,28 @@ export default function CommunityForm() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      if (isEditing && id) {
-        await fetch(`/api/cms/communities/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/cms/communities", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const url = isEditing && id ? `/api/cms/communities/${id}` : "/api/cms/communities";
+      const method = isEditing && id ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || json.success === false) {
+        toast.error(json.error || `Failed to ${isEditing ? "update" : "create"} community`);
+        setIsSubmitting(false);
+        return;
       }
+
+      toast.success(isEditing ? "Community updated successfully!" : "Community created successfully!");
       navigate("/communities");
     } catch (err) {
       console.error("[CommunityForm] Submit error:", err);
-    } finally {
+      toast.error("Network error. Please try again.");
       setIsSubmitting(false);
     }
   };

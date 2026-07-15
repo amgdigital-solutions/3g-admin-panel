@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 import TiptapEditor from "@/components/editor/TiptapEditor";
 import ImageUpload from "@/components/ImageUpload";
 import { BLOG_CATEGORIES, BLOG_STATUS } from "@/types";
@@ -63,23 +64,28 @@ export default function BlogForm() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      if (isEditing && id) {
-        await fetch(`/api/cms/blogs/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/cms/blogs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const url = isEditing && id ? `/api/cms/blogs/${id}` : "/api/cms/blogs";
+      const method = isEditing && id ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || json.success === false) {
+        toast.error(json.error || `Failed to ${isEditing ? "update" : "create"} blog post`);
+        setIsSubmitting(false);
+        return;
       }
+
+      toast.success(isEditing ? "Blog post updated successfully!" : "Blog post created successfully!");
       navigate("/blog-posts");
     } catch (err) {
       console.error("[BlogForm] Submit error:", err);
-    } finally {
+      toast.error("Network error. Please try again.");
       setIsSubmitting(false);
     }
   };
