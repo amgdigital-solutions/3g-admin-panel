@@ -1,12 +1,9 @@
-// ═══════════════════════════════════════════════════════════════════
-//  3G Real Estate API — Zero dependencies, Node.js 20 native fetch
-//  Connects to Supabase REST API directly
-// ═══════════════════════════════════════════════════════════════════
+// 3G Real Estate API - Zero dependencies, Node.js 20 native fetch
+// Connects to Supabase REST API directly
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "";
 
-// ── CORS Headers ──────────────────────────────────────────────────
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
@@ -14,7 +11,6 @@ const cors = {
   "Content-Type": "application/json",
 };
 
-// ── Helpers ───────────────────────────────────────────────────────
 async function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -37,7 +33,6 @@ function generateSlug(title) {
   return title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
 }
 
-// ── Supabase REST API helpers ─────────────────────────────────────
 async function supabaseRequest(table, method, query, body) {
   const url = `${SUPABASE_URL}/rest/v1/${table}${query || ""}`;
   const headers = {
@@ -61,14 +56,13 @@ async function supabaseRequest(table, method, query, body) {
       detail = parsed.message || parsed.error || JSON.stringify(parsed);
     } catch { /* use raw text */ }
     const err = new Error(`Supabase ${method} error (${res.status}): ${detail}`);
-    (err as any).status = res.status;
-    (err as any).supabaseMessage = detail;
+    err.status = res.status;
+    err.supabaseMessage = detail;
     throw err;
   }
   return text ? JSON.parse(text) : [];
 }
 
-// ── Admin Auth (simple token-based) ──────────────────────────────
 const ADMIN_USERS = [
   { id: "admin-1", username: "admin", name: "Admin", email: "admin@3guae.com", role: "super_admin", password: "admin123" },
   { id: "admin-2", username: "qasim", name: "Qasim", email: "qasim@3guae.com", role: "super_admin", password: "qasim@3g123" },
@@ -78,8 +72,6 @@ function generateToken(user) {
   const payload = { id: user.id, username: user.username, role: user.role, exp: Date.now() + 86400000 };
   return Buffer.from(JSON.stringify(payload)).toString("base64");
 }
-
-// ── Field Mappers: Frontend fields → Supabase columns ─────────────
 
 function mapProperty(body) {
   const images = body.images || [];
@@ -116,7 +108,7 @@ function mapProperty(body) {
   };
 }
 
-function mapBlog(body, isCreate = false) {
+function mapBlog(body, isCreate) {
   const status = body.status || "draft";
   const data = {
     title: body.title || "",
@@ -130,7 +122,7 @@ function mapBlog(body, isCreate = false) {
     author: body.author_name || body.author || "3G Real Estate",
   };
   if (isCreate && status === "published") {
-    (data as any).published_at = new Date().toISOString();
+    data.published_at = new Date().toISOString();
   }
   return data;
 }
@@ -157,11 +149,9 @@ function mapCommunity(body) {
   };
 }
 
-// ── Safe API wrappers with error handling ────────────────────────
 async function safeDbCall(req, res, operation) {
   try {
-    const result = await operation();
-    return result;
+    return await operation();
   } catch (err) {
     console.error(`[API] Error on ${req.method} ${req.url}:`, err.supabaseMessage || err.message);
     res.writeHead(err.status || 500, cors);
@@ -170,16 +160,13 @@ async function safeDbCall(req, res, operation) {
   }
 }
 
-// ── Request Handler ───────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
     res.writeHead(204, cors); res.end(); return;
   }
 
   const url = req.url || "";
-  console.log(`[API] ${req.method} ${url}`);
 
-  // Health check
   if (url === "/api/ping" || url === "/api/") {
     res.writeHead(200, cors);
     res.end(JSON.stringify({
@@ -194,92 +181,58 @@ export default async function handler(req, res) {
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     res.writeHead(500, cors);
-    res.end(JSON.stringify({ error: "Supabase not configured", url: SUPABASE_URL ? "set" : "missing", key: SUPABASE_KEY ? "set" : "missing" }));
+    res.end(JSON.stringify({ error: "Supabase not configured" }));
     return;
   }
 
   try {
-    // ═══════════════════════════════════════════════════════════════
-    //  PROPERTIES (public-facing)
-    // ═══════════════════════════════════════════════════════════════
-
+    // PROPERTIES
     if (url === "/api/properties" && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "GET", "?is_published=eq.true&hidden=eq.false&order=id.asc")
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "GET", "?is_published=eq.true&hidden=eq.false&order=id.asc");
       res.writeHead(200, cors); res.end(JSON.stringify({ result: { data: result || [] } })); return;
     }
 
     const propertyId = matchRoute(url, "/api/properties/:id");
     if (propertyId && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "GET", `?id=eq.${propertyId}&limit=1`)
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "GET", `?id=eq.${propertyId}&limit=1`);
       res.writeHead(200, cors); res.end(JSON.stringify({ result: { data: result?.[0] || null } })); return;
     }
 
     if (url === "/api/properties" && req.method === "POST") {
       const body = await parseBody(req);
       if (!body.slug && body.title) body.slug = generateSlug(body.title);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "POST", "", mapProperty(body))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "POST", "", mapProperty(body));
       res.writeHead(201, cors); res.end(JSON.stringify({ result: { data: result?.[0], success: true } })); return;
     }
 
     if (propertyId && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "PATCH", `?id=eq.${propertyId}`, mapProperty(body))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "PATCH", `?id=eq.${propertyId}`, mapProperty(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ result: { data: result?.[0], success: true } })); return;
     }
 
     if (propertyId && req.method === "DELETE") {
-      await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "DELETE", `?id=eq.${propertyId}`)
-      );
+      await supabaseRequest("listed_properties", "DELETE", `?id=eq.${propertyId}`);
       res.writeHead(200, cors); res.end(JSON.stringify({ result: { success: true } })); return;
     }
 
     if (url === "/api/hero" && req.method === "GET") {
-      let result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "GET", "?show_in_hero=eq.true&is_published=eq.true&limit=1")
-      );
-      if (!result || !result[0]) {
-        result = await safeDbCall(req, res, () =>
-          supabaseRequest("listed_properties", "GET", "?listing_type=eq.featured&is_published=eq.true&limit=1")
-        );
-      }
-      if (!result) return;
+      let result = await supabaseRequest("listed_properties", "GET", "?show_in_hero=eq.true&is_published=eq.true&limit=1");
+      if (!result?.[0]) result = await supabaseRequest("listed_properties", "GET", "?listing_type=eq.featured&is_published=eq.true&limit=1");
       res.writeHead(200, cors); res.end(JSON.stringify({ result: { data: result?.[0] || null } })); return;
     }
 
     const propertySlug = matchRoute(url, "/api/property/:slug");
     if (propertySlug && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "GET", `?slug=eq.${propertySlug}&limit=1`)
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "GET", `?slug=eq.${propertySlug}&limit=1`);
       res.writeHead(200, cors); res.end(JSON.stringify({ result: { data: result?.[0] || null } })); return;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  CMS PROPERTIES
-    // ═══════════════════════════════════════════════════════════════
-
+    // CMS PROPERTIES
     const cmsPropSlug = matchRoute(url, "/api/cms/properties/:slug");
 
-    // GET list
     if (url === "/api/cms/properties" && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "GET", "?order=id.asc")
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "GET", "?order=id.asc");
       const mapped = (result || []).map(row => ({
         _id: String(row.id), title: row.title, slug: row.slug,
         excerpt: row.short_description || "", content: row.description || "",
@@ -296,12 +249,8 @@ export default async function handler(req, res) {
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: mapped })); return;
     }
 
-    // GET single by slug
     if (cmsPropSlug && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "GET", `?slug=eq.${cmsPropSlug}&limit=1`)
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "GET", `?slug=eq.${cmsPropSlug}&limit=1`);
       const row = result?.[0];
       res.writeHead(200, cors);
       res.end(JSON.stringify({ success: true, data: row ? {
@@ -319,45 +268,27 @@ export default async function handler(req, res) {
       } : null })); return;
     }
 
-    // POST create
     if (url === "/api/cms/properties" && req.method === "POST") {
       const body = await parseBody(req);
       if (!body.slug && body.title) body.slug = generateSlug(body.title);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "POST", "", mapProperty(body))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "POST", "", mapProperty(body));
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
-    // PUT update
     if (cmsPropSlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "PATCH", `?slug=eq.${cmsPropSlug}`, mapProperty(body))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("listed_properties", "PATCH", `?slug=eq.${cmsPropSlug}`, mapProperty(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
-    // DELETE
     if (cmsPropSlug && req.method === "DELETE") {
-      await safeDbCall(req, res, () =>
-        supabaseRequest("listed_properties", "DELETE", `?slug=eq.${cmsPropSlug}`)
-      );
+      await supabaseRequest("listed_properties", "DELETE", `?slug=eq.${cmsPropSlug}`);
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true })); return;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  BLOG POSTS
-    // ═══════════════════════════════════════════════════════════════
-
-    // GET list
+    // BLOG POSTS
     if (url === "/api/cms/blogs" && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("blog_posts", "GET", "?order=created_at.desc")
-      );
-      if (!result) return;
+      const result = await supabaseRequest("blog_posts", "GET", "?order=created_at.desc");
       const mapped = (result || []).map(row => ({
         _id: String(row.id), title: row.title, slug: row.slug,
         excerpt: row.excerpt || "", content: row.content || "",
@@ -369,13 +300,9 @@ export default async function handler(req, res) {
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: mapped })); return;
     }
 
-    // GET single by slug
     const blogSlug = matchRoute(url, "/api/cms/blogs/:slug");
     if (blogSlug && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("blog_posts", "GET", `?slug=eq.${blogSlug}&limit=1`)
-      );
-      if (!result) return;
+      const result = await supabaseRequest("blog_posts", "GET", `?slug=eq.${blogSlug}&limit=1`);
       const row = result?.[0];
       res.writeHead(200, cors);
       res.end(JSON.stringify({ success: true, data: row ? {
@@ -388,44 +315,26 @@ export default async function handler(req, res) {
       } : null })); return;
     }
 
-    // POST create
     if (url === "/api/cms/blogs" && req.method === "POST") {
       const body = await parseBody(req);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("blog_posts", "POST", "", mapBlog(body, true))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("blog_posts", "POST", "", mapBlog(body, true));
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
-    // PUT update
     if (blogSlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("blog_posts", "PATCH", `?slug=eq.${blogSlug}`, mapBlog(body))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("blog_posts", "PATCH", `?slug=eq.${blogSlug}`, mapBlog(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
-    // DELETE
     if (blogSlug && req.method === "DELETE") {
-      await safeDbCall(req, res, () =>
-        supabaseRequest("blog_posts", "DELETE", `?slug=eq.${blogSlug}`)
-      );
+      await supabaseRequest("blog_posts", "DELETE", `?slug=eq.${blogSlug}`);
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true })); return;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  COMMUNITIES
-    // ═══════════════════════════════════════════════════════════════
-
-    // GET list
+    // COMMUNITIES
     if (url === "/api/cms/communities" && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("communities", "GET", "?order=name.asc")
-      );
-      if (!result) return;
+      const result = await supabaseRequest("communities", "GET", "?order=name.asc");
       const mapped = (result || []).map(row => ({
         _id: String(row.id), name: row.name, slug: row.slug,
         category: row.category || "", description: row.description || "",
@@ -438,13 +347,9 @@ export default async function handler(req, res) {
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: mapped })); return;
     }
 
-    // GET single by slug
     const communitySlug = matchRoute(url, "/api/cms/communities/:slug");
     if (communitySlug && req.method === "GET") {
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("communities", "GET", `?slug=eq.${communitySlug}&limit=1`)
-      );
-      if (!result) return;
+      const result = await supabaseRequest("communities", "GET", `?slug=eq.${communitySlug}&limit=1`);
       const row = result?.[0];
       res.writeHead(200, cors);
       res.end(JSON.stringify({ success: true, data: row ? {
@@ -458,46 +363,29 @@ export default async function handler(req, res) {
       } : null })); return;
     }
 
-    // POST create
     if (url === "/api/cms/communities" && req.method === "POST") {
       const body = await parseBody(req);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("communities", "POST", "", mapCommunity(body))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("communities", "POST", "", mapCommunity(body));
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
-    // PUT update
     if (communitySlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await safeDbCall(req, res, () =>
-        supabaseRequest("communities", "PATCH", `?slug=eq.${communitySlug}`, mapCommunity(body))
-      );
-      if (!result) return;
+      const result = await supabaseRequest("communities", "PATCH", `?slug=eq.${communitySlug}`, mapCommunity(body));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
-    // DELETE
     if (communitySlug && req.method === "DELETE") {
-      await safeDbCall(req, res, () =>
-        supabaseRequest("communities", "DELETE", `?slug=eq.${communitySlug}`)
-      );
+      await supabaseRequest("communities", "DELETE", `?slug=eq.${communitySlug}`);
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true })); return;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  DOWNLOAD REQUESTS (Leads)
-    // ═══════════════════════════════════════════════════════════════
-
+    // DOWNLOAD REQUESTS
     if (url.startsWith("/api/download-requests") && req.method === "GET") {
       const urlObj = new URL(url, `http://localhost`);
       const action = urlObj.searchParams.get("action") || "list";
       if (action === "list") {
-        const result = await safeDbCall(req, res, () =>
-          supabaseRequest("download_requests", "GET", "?order=created_at.desc")
-        );
-        if (!result) return;
+        const result = await supabaseRequest("download_requests", "GET", "?order=created_at.desc");
         const mapped = (result || []).map(row => ({
           id: String(row.id), name: row.name || "", email: row.email || "",
           phone: row.phone || "", interest: row.interest || "",
@@ -509,10 +397,7 @@ export default async function handler(req, res) {
       res.writeHead(400, cors); res.end(JSON.stringify({ error: "Unknown action" })); return;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  ADMIN AUTH
-    // ═══════════════════════════════════════════════════════════════
-
+    // ADMIN AUTH
     if (url.startsWith("/api/admin") && req.method === "POST") {
       const body = await parseBody(req);
       const urlObj = new URL(url, `http://localhost`);
@@ -531,7 +416,7 @@ export default async function handler(req, res) {
 
       if (action === "me" || action === "users.list") {
         const users = ADMIN_USERS.map(u => {
-          const { password: _, ...withoutPassword } = u;
+          const { password: pwd, ...withoutPassword } = u;
           return { ...withoutPassword, hasWebsite: true, hasCrm: true, websiteFeatures: ["leads","agents_view","properties","communities","blogs"], crmFeatures: ["invoices","calculator","payroll","accounting","analytics","uae_services"] };
         });
         res.writeHead(200, cors); res.end(JSON.stringify({ users })); return;
@@ -564,7 +449,7 @@ export default async function handler(req, res) {
       const urlObj = new URL(url, `http://localhost`);
       if (urlObj.searchParams.get("action") === "me") {
         const users = ADMIN_USERS.map(u => {
-          const { password: _, ...withoutPassword } = u;
+          const { password: pwd, ...withoutPassword } = u;
           return { ...withoutPassword, hasWebsite: true, hasCrm: true };
         });
         res.writeHead(200, cors); res.end(JSON.stringify({ user: users[0] })); return;
@@ -572,17 +457,12 @@ export default async function handler(req, res) {
       res.writeHead(400, cors); res.end(JSON.stringify({ error: "Unknown GET action" })); return;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  UPLOAD (stub)
-    // ═══════════════════════════════════════════════════════════════
-
     if (url === "/api/upload" && req.method === "POST") {
       res.writeHead(200, cors);
       res.end(JSON.stringify({ success: true, url: "https://placehold.co/600x400?text=Uploaded", publicId: "placeholder" }));
       return;
     }
 
-    // 404
     res.writeHead(404, cors);
     res.end(JSON.stringify({ error: "Not found", url, method: req.method }));
 
