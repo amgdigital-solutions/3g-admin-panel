@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import TiptapEditor from "@/components/editor/TiptapEditor";
 import ImageUpload, { GalleryUpload } from "@/components/ImageUpload";
 import { PROPERTY_TYPES, PROPERTY_STATUS, COMMON_AMENITIES } from "@/types";
-import { ArrowLeft, Plus, X, Save, Barcode } from "lucide-react";
+import { ArrowLeft, Plus, X, Save, Barcode, AlertCircle } from "lucide-react";
 
 interface FAQ { q: string; a: string; }
 
@@ -42,6 +42,7 @@ export default function PropertyForm() {
   const [newAmenity, setNewAmenity] = useState("");
   const [newFaq, setNewFaq] = useState<FAQ>({ q: "", a: "" });
   const [activeTab, setActiveTab] = useState("basic");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isEditing && id) {
@@ -67,10 +68,18 @@ export default function PropertyForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
+
+    // Validation
+    if (!form.title.trim()) { setError("Property title is required"); setIsSubmitting(false); return; }
+    if (!form.slug.trim()) { setError("Slug is required"); setIsSubmitting(false); return; }
+
     try {
       const payload = { ...form, show_in_hero: form.featured };
       const url = isEditing && id ? `/api/cms/properties/${id}` : "/api/cms/properties";
       const method = isEditing && id ? "PUT" : "POST";
+
+      console.log(`[PropertyForm] Submitting ${method} to ${url}`, payload);
 
       const res = await fetch(url, {
         method,
@@ -78,19 +87,27 @@ export default function PropertyForm() {
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
+      const text = await res.text();
+      console.log(`[PropertyForm] Response ${res.status}:`, text);
 
-      if (!res.ok || json.success === false) {
-        toast.error(json.error || `Failed to ${isEditing ? "update" : "create"} property`);
+      let json = {};
+      try { json = JSON.parse(text); } catch { /* ignore parse error */ }
+
+      if (!res.ok || (json as any).success === false) {
+        const msg = (json as any).error || `Failed to ${isEditing ? "update" : "create"} property (HTTP ${res.status})`;
+        setError(msg);
+        toast.error(msg);
         setIsSubmitting(false);
         return;
       }
 
       toast.success(isEditing ? "Property updated successfully!" : "Property created successfully!");
       navigate("/properties");
-    } catch (err) {
+    } catch (err: any) {
       console.error("[PropertyForm] Submit error:", err);
-      toast.error("Network error. Please try again.");
+      const msg = "Network error. Please check your connection and try again.";
+      setError(msg);
+      toast.error(msg);
       setIsSubmitting(false);
     }
   };
@@ -127,6 +144,17 @@ export default function PropertyForm() {
           <p className="text-gray-500 text-sm">{isEditing ? "Update property details" : "Create a new property listing"}</p>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">Error</p>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-white border">
@@ -148,13 +176,7 @@ export default function PropertyForm() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label><Barcode className="h-4 w-4 inline mr-1.5 text-gray-400" />Barcode Image</Label>
-                  <ImageUpload
-                    value={form.barcode}
-                    onChange={(url) => updateField("barcode", url)}
-                    type="properties"
-                    label="Barcode / QR Code"
-                    folder="barcodes"
-                  />
+                  <ImageUpload value={form.barcode} onChange={(url) => updateField("barcode", url)} type="properties" label="Barcode / QR Code" folder="barcodes" />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Description</Label>
@@ -187,25 +209,8 @@ export default function PropertyForm() {
           </TabsContent>
           <TabsContent value="media" className="space-y-4">
             <div className="bg-white rounded-lg border p-6 space-y-6">
-              <ImageUpload
-                value={form.images[0] || ""}
-                onChange={(url) => {
-                  const imgs = [...form.images];
-                  if (imgs.length === 0) imgs.push(url); else imgs[0] = url;
-                  updateField("images", imgs);
-                }}
-                type="properties"
-                label="Featured Image (Hero)"
-              />
-              <GalleryUpload
-                images={form.images.filter((_, i) => i > 0)}
-                onChange={(galleryUrls) => {
-                  const hero = form.images[0] || "";
-                  updateField("images", hero ? [hero, ...galleryUrls] : galleryUrls);
-                }}
-                type="properties"
-                label="Photo Gallery"
-              />
+              <ImageUpload value={form.images[0] || ""} onChange={(url) => { const imgs = [...form.images]; if (imgs.length === 0) imgs.push(url); else imgs[0] = url; updateField("images", imgs); }} type="properties" label="Featured Image (Hero)" />
+              <GalleryUpload images={form.images.filter((_, i) => i > 0)} onChange={(galleryUrls) => { const hero = form.images[0] || ""; updateField("images", hero ? [hero, ...galleryUrls] : galleryUrls); }} type="properties" label="Photo Gallery" />
               <div className="space-y-3">
                 <Label>Amenities</Label>
                 <div className="flex flex-wrap gap-2">

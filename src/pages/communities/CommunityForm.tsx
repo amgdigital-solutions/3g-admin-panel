@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import ImageUpload, { GalleryUpload } from "@/components/ImageUpload";
 import { PROPERTY_TYPES, COMMUNITY_STATUS, COMMON_AMENITIES } from "@/types";
-import { ArrowLeft, Plus, X, Save } from "lucide-react";
+import { ArrowLeft, Plus, X, Save, AlertCircle } from "lucide-react";
 
 const emptyForm = { name: "", slug: "", description: "", short_description: "", image: "", gallery: [] as string[], location: "", avg_price: "", property_types: [] as string[], amenities: [] as string[], meta_title: "", meta_description: "", status: "draft" as const };
 
@@ -29,6 +29,7 @@ export default function CommunityForm() {
   const [form, setForm] = useState(emptyForm);
   const [isLoading, setIsLoading] = useState(isEditing);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isEditing && id) {
@@ -55,9 +56,16 @@ export default function CommunityForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
+
+    if (!form.name.trim()) { setError("Community name is required"); setIsSubmitting(false); return; }
+    if (!form.slug.trim()) { setError("Slug is required"); setIsSubmitting(false); return; }
+
     try {
       const url = isEditing && id ? `/api/cms/communities/${id}` : "/api/cms/communities";
       const method = isEditing && id ? "PUT" : "POST";
+
+      console.log(`[CommunityForm] Submitting ${method} to ${url}`, form);
 
       const res = await fetch(url, {
         method,
@@ -65,19 +73,27 @@ export default function CommunityForm() {
         body: JSON.stringify(form),
       });
 
-      const json = await res.json();
+      const text = await res.text();
+      console.log(`[CommunityForm] Response ${res.status}:`, text);
 
-      if (!res.ok || json.success === false) {
-        toast.error(json.error || `Failed to ${isEditing ? "update" : "create"} community`);
+      let json = {};
+      try { json = JSON.parse(text); } catch { /* ignore */ }
+
+      if (!res.ok || (json as any).success === false) {
+        const msg = (json as any).error || `Failed to ${isEditing ? "update" : "create"} community (HTTP ${res.status})`;
+        setError(msg);
+        toast.error(msg);
         setIsSubmitting(false);
         return;
       }
 
       toast.success(isEditing ? "Community updated successfully!" : "Community created successfully!");
       navigate("/communities");
-    } catch (err) {
+    } catch (err: any) {
       console.error("[CommunityForm] Submit error:", err);
-      toast.error("Network error. Please try again.");
+      const msg = "Network error. Please check your connection and try again.";
+      setError(msg);
+      toast.error(msg);
       setIsSubmitting(false);
     }
   };
@@ -108,6 +124,17 @@ export default function CommunityForm() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/communities")}><ArrowLeft className="h-5 w-5" /></Button>
         <div><h1 className="text-2xl font-bold text-[#1E3A5F]">{isEditing ? "Edit Community" : "Add Community"}</h1><p className="text-gray-500 text-sm">{isEditing ? "Update community details" : "Create a new community"}</p></div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">Error</p>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <Tabs defaultValue="basic" className="space-y-6">
           <TabsList className="bg-white border"><TabsTrigger value="basic">Basic Info</TabsTrigger><TabsTrigger value="media">Media & Details</TabsTrigger><TabsTrigger value="seo">SEO</TabsTrigger></TabsList>
@@ -122,24 +149,14 @@ export default function CommunityForm() {
                 <div className="space-y-2"><Label>Average Price Range</Label><Input value={form.avg_price} onChange={(e) => updateField("avg_price", e.target.value)} placeholder="e.g. AED 1.2M - 5M" /></div>
                 <div className="space-y-2"><Label>Status</Label><Select value={form.status} onValueChange={(v) => updateField("status", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{COMMUNITY_STATUS.map((s) => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2 md:col-span-2">
-                  <ImageUpload
-                    value={form.image}
-                    onChange={(url) => updateField("image", url)}
-                    type="communities"
-                    label="Hero Image"
-                  />
+                  <ImageUpload value={form.image} onChange={(url) => updateField("image", url)} type="communities" label="Hero Image" />
                 </div>
               </div>
             </div>
           </TabsContent>
           <TabsContent value="media" className="space-y-4">
             <div className="bg-white rounded-lg border p-6 space-y-6">
-              <GalleryUpload
-                images={form.gallery}
-                onChange={(urls) => updateField("gallery", urls)}
-                type="communities"
-                label="Photo Gallery"
-              />
+              <GalleryUpload images={form.gallery} onChange={(urls) => updateField("gallery", urls)} type="communities" label="Photo Gallery" />
               <div className="space-y-3"><Label>Property Types Available</Label><div className="flex flex-wrap gap-2">{PROPERTY_TYPES.map((type) => (<button key={type} type="button" onClick={() => togglePropertyType(type)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${form.property_types.includes(type) ? "bg-[#1E3A5F] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{type}</button>))}</div></div>
               <div className="space-y-3"><Label>Community Amenities</Label><div className="flex flex-wrap gap-2">{COMMON_AMENITIES.map((amenity) => (<button key={amenity} type="button" onClick={() => toggleAmenity(amenity)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${form.amenities.includes(amenity) ? "bg-emerald-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{amenity}</button>))}</div></div>
             </div>

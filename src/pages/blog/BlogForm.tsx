@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import TiptapEditor from "@/components/editor/TiptapEditor";
 import ImageUpload from "@/components/ImageUpload";
 import { BLOG_CATEGORIES, BLOG_STATUS } from "@/types";
-import { ArrowLeft, Plus, X, Save } from "lucide-react";
+import { ArrowLeft, Plus, X, Save, AlertCircle } from "lucide-react";
 
 interface FAQ { q: string; a: string; }
 
@@ -40,6 +40,7 @@ export default function BlogForm() {
   const [newTag, setNewTag] = useState("");
   const [newFaq, setNewFaq] = useState<FAQ>({ q: "", a: "" });
   const [activeTab, setActiveTab] = useState("content");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isEditing && id) {
@@ -63,9 +64,16 @@ export default function BlogForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
+
+    if (!form.title.trim()) { setError("Post title is required"); setIsSubmitting(false); return; }
+    if (!form.slug.trim()) { setError("Slug is required"); setIsSubmitting(false); return; }
+
     try {
       const url = isEditing && id ? `/api/cms/blogs/${id}` : "/api/cms/blogs";
       const method = isEditing && id ? "PUT" : "POST";
+
+      console.log(`[BlogForm] Submitting ${method} to ${url}`, form);
 
       const res = await fetch(url, {
         method,
@@ -73,19 +81,27 @@ export default function BlogForm() {
         body: JSON.stringify(form),
       });
 
-      const json = await res.json();
+      const text = await res.text();
+      console.log(`[BlogForm] Response ${res.status}:`, text);
 
-      if (!res.ok || json.success === false) {
-        toast.error(json.error || `Failed to ${isEditing ? "update" : "create"} blog post`);
+      let json = {};
+      try { json = JSON.parse(text); } catch { /* ignore */ }
+
+      if (!res.ok || (json as any).success === false) {
+        const msg = (json as any).error || `Failed to ${isEditing ? "update" : "create"} blog post (HTTP ${res.status})`;
+        setError(msg);
+        toast.error(msg);
         setIsSubmitting(false);
         return;
       }
 
       toast.success(isEditing ? "Blog post updated successfully!" : "Blog post created successfully!");
       navigate("/blog-posts");
-    } catch (err) {
+    } catch (err: any) {
       console.error("[BlogForm] Submit error:", err);
-      toast.error("Network error. Please try again.");
+      const msg = "Network error. Please check your connection and try again.";
+      setError(msg);
+      toast.error(msg);
       setIsSubmitting(false);
     }
   };
@@ -121,6 +137,17 @@ export default function BlogForm() {
           <p className="text-gray-500 text-sm">{isEditing ? "Update blog post" : "Create a new blog post"}</p>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">Error</p>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-white border">
@@ -162,12 +189,7 @@ export default function BlogForm() {
                   <Textarea value={form.excerpt} onChange={e => updateField("excerpt", e.target.value)} placeholder="Short summary for blog cards" rows={2} />
                 </div>
               </div>
-              <ImageUpload
-                value={form.featured_image}
-                onChange={(url) => updateField("featured_image", url)}
-                type="blogs"
-                label="Featured Image"
-              />
+              <ImageUpload value={form.featured_image} onChange={(url) => updateField("featured_image", url)} type="blogs" label="Featured Image" />
               <div className="space-y-2">
                 <Label>Tags</Label>
                 <div className="flex gap-2">
