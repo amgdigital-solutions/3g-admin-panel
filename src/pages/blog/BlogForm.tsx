@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
-import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,40 +19,91 @@ const emptyForm = {
   meta_title: "", meta_description: "", focus_keyword: "", tags: [] as string[], faqs: [] as FAQ[],
 };
 
+async function fetchItem(url: string) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) { console.error(`[BlogForm] API error ${res.status}`); return null; }
+    const json = await res.json();
+    return json.data || null;
+  } catch (err) { console.error(`[BlogForm] Fetch error:`, err); return null; }
+}
+
 export default function BlogForm() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEditing = !!id;
-  const utils = trpc.useUtils();
-  const { data: existing } = trpc.blogPosts.getById.useQuery({ id: id! }, { enabled: isEditing });
   const [form, setForm] = useState(emptyForm);
+  const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [newFaq, setNewFaq] = useState<FAQ>({ q: "", a: "" });
   const [activeTab, setActiveTab] = useState("content");
 
   useEffect(() => {
-    if (existing) {
-      setForm({
-        title: existing.title || "", slug: existing.slug || "", excerpt: existing.excerpt || "",
-        content: existing.content || "", category: existing.category || "Investment Guide",
-        author_name: existing.author_name || "3G Real Estate", status: (existing.status as "draft" | "published") || "draft",
-        featured_image: existing.featured_image || "", meta_title: existing.meta_title || "",
-        meta_description: existing.meta_description || "", focus_keyword: existing.focus_keyword || "",
-        tags: existing.tags || [], faqs: (existing.faqs as FAQ[]) || [],
+    if (isEditing && id) {
+      setIsLoading(true);
+      fetchItem(`/api/cms/blogs/${id}`).then((data) => {
+        if (data) {
+          setForm({
+            title: data.title || "", slug: data.slug || "", excerpt: data.excerpt || "",
+            content: data.content || "", category: data.category || "Investment Guide",
+            author_name: data.author_name || data.author || "3G Real Estate", status: (data.status as "draft" | "published") || "draft",
+            featured_image: data.featured_image || data.coverImage || "", meta_title: data.meta_title || "",
+            meta_description: data.meta_description || "", focus_keyword: data.focus_keyword || "",
+            tags: data.tags || [], faqs: (data.faqs as FAQ[]) || [],
+          });
+        }
+        setIsLoading(false);
       });
     }
-  }, [existing]);
+  }, [id, isEditing]);
 
-  const createMutation = trpc.blogPosts.create.useMutation({ onSuccess: () => { utils.blogPosts.list.invalidate(); navigate("/blog-posts"); } });
-  const updateMutation = trpc.blogPosts.update.useMutation({ onSuccess: () => { utils.blogPosts.list.invalidate(); navigate("/blog-posts"); } });
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); isEditing && id ? updateMutation.mutate({ id, ...form }) : createMutation.mutate(form); };
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      if (isEditing && id) {
+        await fetch(`/api/cms/blogs/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/cms/blogs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      navigate("/blog-posts");
+    } catch (err) {
+      console.error("[BlogForm] Submit error:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const addTag = () => { if (newTag.trim() && !form.tags.includes(newTag.trim())) { setForm(f => ({ ...f, tags: [...f.tags, newTag.trim()] })); setNewTag(""); } };
   const removeTag = (idx: number) => setForm(f => ({ ...f, tags: f.tags.filter((_, i) => i !== idx) }));
   const addFaq = () => { if (newFaq.q.trim() && newFaq.a.trim()) { setForm(f => ({ ...f, faqs: [...f.faqs, { ...newFaq }] })); setNewFaq({ q: "", a: "" }); } };
   const removeFaq = (idx: number) => setForm(f => ({ ...f, faqs: f.faqs.filter((_, i) => i !== idx) }));
   const updateField = (field: string, value: unknown) => setForm(f => ({ ...f, [field]: value }));
   const generateSlug = (title: string) => title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").substring(0, 60);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/blog-posts")}><ArrowLeft className="h-5 w-5" /></Button>
+          <div><h1 className="text-2xl font-bold text-[#1E3A5F]">Loading...</h1></div>
+        </div>
+        <div className="bg-white rounded-lg border p-6 space-y-4 animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
