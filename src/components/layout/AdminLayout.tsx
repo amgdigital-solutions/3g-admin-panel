@@ -3,7 +3,8 @@ import { Link, useLocation } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { LayoutDashboard, Building2, FileText, MapPin, Download, Menu, LogOut, ChevronLeft, ChevronRight, Home } from "lucide-react";
+import { Toaster } from "@/components/ui/sonner";
+import { LayoutDashboard, Building2, FileText, MapPin, Download, Menu, LogOut, ChevronLeft, ChevronRight, Home, Settings } from "lucide-react";
 
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -11,6 +12,7 @@ const navItems = [
   { path: "/blog-posts", label: "Blog Posts", icon: FileText },
   { path: "/communities", label: "Communities", icon: MapPin },
   { path: "/download-requests", label: "Downloads", icon: Download },
+  { path: "/settings", label: "Site Settings", icon: Settings },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -102,6 +104,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <main className="flex-1 overflow-auto md:pt-0 pt-14">
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{children}</div>
       </main>
+      <Toaster position="top-right" richColors />
     </div>
   );
 }
