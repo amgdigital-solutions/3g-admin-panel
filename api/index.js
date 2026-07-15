@@ -106,7 +106,6 @@ function mapProperty(body) {
     faqs: body.faqs || [],
   };
   // Only include developer_name if user has this column in their Supabase table
-  // If Supabase throws "could not find developer_name", this field is not included
   if (body.developer || body.developer_name) {
     mapped.developer_name = body.developer || body.developer_name;
   }
@@ -244,6 +243,7 @@ export default async function handler(req, res) {
         coverImage: row.featured_image || "", status: row.is_published ? "published" : "draft",
         category: row.property_category || "", location: row.location || "",
         price: row.price || 0, bedrooms: row.bedrooms || "", bathrooms: row.bathrooms || "",
+        developer: row.developer_name || "", developer_name: row.developer_name || "",
         listingType: row.listing_type || "normal",
         soldOut: row.sold_out || false, hidden: row.hidden || false,
         showInHero: row.show_in_hero || false, isNewLaunch: row.is_new_launch || false,
@@ -264,6 +264,7 @@ export default async function handler(req, res) {
         coverImage: row.featured_image || "", status: row.is_published ? "published" : "draft",
         category: row.property_category || "", location: row.location || "",
         price: row.price || 0, bedrooms: row.bedrooms || "", bathrooms: row.bathrooms || "",
+        developer: row.developer_name || "", developer_name: row.developer_name || "",
         listingType: row.listing_type || "normal",
         soldOut: row.sold_out || false, hidden: row.hidden || false,
         showInHero: row.show_in_hero || false, isNewLaunch: row.is_new_launch || false,
