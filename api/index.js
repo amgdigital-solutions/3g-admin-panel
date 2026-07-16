@@ -189,6 +189,32 @@ function mapCommunity(body) {
   return data;
 }
 
+// SITE SETTINGS helpers
+function mapSiteSettings(row) {
+  return {
+    ga4Id: row.ga4_id || "",
+    gtmId: row.gtm_id || "",
+    fbPixelId: row.fb_pixel_id || "",
+    metaVerification: row.meta_verification || "",
+    hotjarId: row.hotjar_id || "",
+    customHead: row.custom_head || "",
+    customBody: row.custom_body || "",
+  };
+}
+
+function mapSiteSettingsToDb(body) {
+  const data = {};
+  if (body.ga4Id !== undefined) data.ga4_id = body.ga4Id;
+  if (body.gtmId !== undefined) data.gtm_id = body.gtmId;
+  if (body.fbPixelId !== undefined) data.fb_pixel_id = body.fbPixelId;
+  if (body.metaVerification !== undefined) data.meta_verification = body.metaVerification;
+  if (body.hotjarId !== undefined) data.hotjar_id = body.hotjarId;
+  if (body.customHead !== undefined) data.custom_head = body.customHead;
+  if (body.customBody !== undefined) data.custom_body = body.customBody;
+  data.updated_at = new Date().toISOString();
+  return data;
+}
+
 async function safeDbCall(req, res, operation) {
   try {
     return await operation();
@@ -226,6 +252,70 @@ export default async function handler(req, res) {
   }
 
   try {
+    // SITE SETTINGS
+    if (url === "/api/site-settings" && req.method === "GET") {
+      try {
+        const result = await supabaseRequest("site_settings", "GET", "?limit=1");
+        const row = result?.[0];
+        res.writeHead(200, cors);
+        res.end(JSON.stringify({
+          success: true,
+          dbAvailable: true,
+          data: row ? mapSiteSettings(row) : {},
+        }));
+        return;
+      } catch (err) {
+        // If table doesn't exist, return empty settings with flag
+        const isMissingTable = err.supabaseMessage?.includes("site_settings") ||
+                               err.supabaseMessage?.includes("does not exist") ||
+                               err.status === 404;
+        if (isMissingTable) {
+          res.writeHead(200, cors);
+          res.end(JSON.stringify({
+            success: true,
+            dbAvailable: false,
+            data: {},
+            message: "site_settings table not found. Run the SQL to create it.",
+          }));
+          return;
+        }
+        throw err;
+      }
+    }
+
+    if (url === "/api/site-settings" && req.method === "POST") {
+      const body = await parseBody(req);
+      const dbBody = mapSiteSettingsToDb(body);
+      try {
+        // Try upsert — if row exists (id=1), update it; if not, insert
+        let result;
+        try {
+          result = await supabaseRequest("site_settings", "PATCH", "?id=eq.1", dbBody);
+        } catch {
+          // If PATCH fails (no row), try POST to create
+          result = await supabaseRequest("site_settings", "POST", "", { id: 1, ...dbBody });
+        }
+        res.writeHead(200, cors);
+        res.end(JSON.stringify({
+          success: true,
+          data: result?.[0] ? mapSiteSettings(result[0]) : body,
+        }));
+        return;
+      } catch (err) {
+        const isMissingTable = err.supabaseMessage?.includes("site_settings") ||
+                               err.supabaseMessage?.includes("does not exist");
+        if (isMissingTable) {
+          res.writeHead(503, cors);
+          res.end(JSON.stringify({
+            success: false,
+            error: "site_settings table not found. Run the SQL to create it in Supabase.",
+          }));
+          return;
+        }
+        throw err;
+      }
+    }
+
     // PROPERTIES
     if (url === "/api/properties" && req.method === "GET") {
       const result = await supabaseRequest("listed_properties", "GET", "?is_published=eq.true&hidden=eq.false&order=id.asc");
