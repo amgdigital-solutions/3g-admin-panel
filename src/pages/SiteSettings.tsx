@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { BarChart3, Save, Check, Copy } from "lucide-react";
+import { BarChart3, Save, Check, Copy, AlertTriangle, Database } from "lucide-react";
 
 const STORAGE_KEY = "3g_admin_settings";
 
@@ -29,7 +29,7 @@ const defaultSettings: SiteSettings = {
   customBody: "",
 };
 
-function loadSettings(): SiteSettings {
+function loadLocalSettings(): SiteSettings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) return { ...defaultSettings, ...JSON.parse(stored) };
@@ -37,7 +37,7 @@ function loadSettings(): SiteSettings {
   return { ...defaultSettings };
 }
 
-function saveSettings(settings: SiteSettings) {
+function saveLocalSettings(settings: SiteSettings) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
 
@@ -76,8 +76,40 @@ function generateScriptTags(settings: SiteSettings): string {
 }
 
 export default function SiteSettingsPage() {
-  const [settings, setSettings] = useState<SiteSettings>(loadSettings);
+  const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
   const [saved, setSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dbAvailable, setDbAvailable] = useState(false);
+  const [saveMode, setSaveMode] = useState<"api" | "local">("local");
+
+  // Load settings from API on mount (with localStorage fallback)
+  const loadSettings = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/site-settings");
+      const json = await res.json();
+      if (json.success && json.data && Object.keys(json.data).length > 0) {
+        setSettings({ ...defaultSettings, ...json.data });
+        setDbAvailable(json.dbAvailable === true);
+        setSaveMode(json.dbAvailable === true ? "api" : "local");
+      } else {
+        // API returned empty — fall back to localStorage
+        setSettings(loadLocalSettings());
+        setDbAvailable(false);
+        setSaveMode("local");
+      }
+    } catch {
+      // API failed entirely — fall back to localStorage
+      setSettings(loadLocalSettings());
+      setDbAvailable(false);
+      setSaveMode("local");
+    }
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   useEffect(() => {
     if (saved) {
@@ -90,10 +122,42 @@ export default function SiteSettingsPage() {
     setSettings((s) => ({ ...s, [field]: value }));
   };
 
-  const handleSave = () => {
-    saveSettings(settings);
+  const handleSave = async () => {
+    let savedToApi = false;
+
+    // Try API first if DB is available
+    if (saveMode === "api" || dbAvailable) {
+      try {
+        const res = await fetch("/api/site-settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(settings),
+        });
+        const json = await res.json();
+        if (json.success) {
+          savedToApi = true;
+          setDbAvailable(true);
+          setSaveMode("api");
+          toast.success("Settings saved to Supabase");
+        } else {
+          // API save failed — fall back to localStorage
+          setDbAvailable(false);
+          setSaveMode("local");
+        }
+      } catch {
+        setDbAvailable(false);
+        setSaveMode("local");
+      }
+    }
+
+    // Always save to localStorage as backup
+    saveLocalSettings(settings);
+
+    if (!savedToApi) {
+      toast.success("Settings saved locally (Supabase table not ready)");
+    }
+
     setSaved(true);
-    toast.success("Settings saved successfully");
   };
 
   const scriptCode = generateScriptTags(settings);
@@ -103,12 +167,52 @@ export default function SiteSettingsPage() {
     toast.success("Code copied to clipboard");
   };
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div>
+          <h1 className="text-2xl font-bold text-[#1E3A5F]">Site Settings</h1>
+          <p className="text-gray-500 text-sm mt-0.5">Loading...</p>
+        </div>
+        <div className="bg-white rounded-lg border p-6 animate-pulse space-y-4">
+          <div className="h-4 bg-gray-200 rounded w-1/3" />
+          <div className="h-10 bg-gray-200 rounded" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold text-[#1E3A5F]">Site Settings</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Configure tracking codes and third-party integrations</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-[#1E3A5F]">Site Settings</h1>
+          <p className="text-gray-500 text-sm mt-0.5">Configure tracking codes and third-party integrations</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {dbAvailable ? (
+            <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+              <Database className="h-3 w-3 mr-1" /> Supabase
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
+              <AlertTriangle className="h-3 w-3 mr-1" /> Local Only
+            </Badge>
+          )}
+        </div>
       </div>
+
+      {!dbAvailable && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">Supabase table not found</p>
+            <p className="text-sm text-amber-700 mt-1">
+              Settings are being saved to your browser only. To enable cloud persistence, create the <code className="bg-amber-100 px-1 rounded">site_settings</code> table in Supabase (see SQL below).
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-0 shadow-sm">
@@ -203,22 +307,53 @@ export default function SiteSettingsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-3 pt-4">
+      <div className="flex items-center justify-end gap-3 pt-4">
         <Button onClick={handleSave} className="bg-[#1E3A5F] hover:bg-[#152d4a]">
           {saved ? <><Check className="h-4 w-4 mr-2" /> Saved</> : <><Save className="h-4 w-4 mr-2" /> Save Settings</>}
         </Button>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-amber-800 mb-2">How to add to your Next.js site:</h3>
-        <ol className="text-sm text-amber-700 space-y-1 list-decimal list-inside">
+      {!dbAvailable && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Enable Cloud Persistence
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-amber-700">
+              Run this SQL in your Supabase SQL Editor to create the <code className="bg-amber-100 px-1 rounded">site_settings</code> table:
+            </p>
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-x-auto font-mono leading-relaxed">
+{`CREATE TABLE IF NOT EXISTS site_settings (
+  id int PRIMARY KEY DEFAULT 1,
+  ga4_id text,
+  gtm_id text,
+  fb_pixel_id text,
+  meta_verification text,
+  hotjar_id text,
+  custom_head text,
+  custom_body text,
+  updated_at timestamptz DEFAULT now()
+);`}
+            </pre>
+            <p className="text-xs text-amber-600">
+              After creating the table, refresh this page and your settings will be saved to Supabase automatically.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-blue-800 mb-2">How to add to your Next.js site:</h3>
+        <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
           <li>Click &quot;Copy All Code&quot; above</li>
           <li>Open your Next.js site code (3g-nextjs-site)</li>
           <li>Find <code>app/layout.tsx</code> or <code>app/[locale]/layout.tsx</code></li>
           <li>Paste the code inside the <code>&lt;head&gt;</code> section</li>
           <li>Redeploy your Next.js site</li>
         </ol>
-        <p className="text-xs text-amber-600 mt-2">Note: Settings are saved locally in this browser. In the future, these will be stored in Supabase for persistence.</p>
       </div>
     </div>
   );
