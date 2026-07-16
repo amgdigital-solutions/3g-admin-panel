@@ -265,7 +265,6 @@ export default async function handler(req, res) {
         }));
         return;
       } catch (err) {
-        // If table doesn't exist, return empty settings with flag
         const isMissingTable = err.supabaseMessage?.includes("site_settings") ||
                                err.supabaseMessage?.includes("does not exist") ||
                                err.status === 404;
@@ -287,12 +286,19 @@ export default async function handler(req, res) {
       const body = await parseBody(req);
       const dbBody = mapSiteSettingsToDb(body);
       try {
-        // Try upsert — if row exists (id=1), update it; if not, insert
+        // FIX: Check if row exists first, then PATCH or INSERT accordingly
         let result;
         try {
-          result = await supabaseRequest("site_settings", "PATCH", "?id=eq.1", dbBody);
+          const existing = await supabaseRequest("site_settings", "GET", "?id=eq.1&limit=1");
+          if (existing && existing.length > 0) {
+            // Row exists → PATCH
+            result = await supabaseRequest("site_settings", "PATCH", "?id=eq.1", dbBody);
+          } else {
+            // No row → INSERT
+            result = await supabaseRequest("site_settings", "POST", "", { id: 1, ...dbBody });
+          }
         } catch {
-          // If PATCH fails (no row), try POST to create
+          // If GET fails somehow, try INSERT as fallback
           result = await supabaseRequest("site_settings", "POST", "", { id: 1, ...dbBody });
         }
         res.writeHead(200, cors);
