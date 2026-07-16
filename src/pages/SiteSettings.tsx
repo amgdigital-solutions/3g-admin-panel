@@ -88,10 +88,12 @@ export default function SiteSettingsPage() {
     try {
       const res = await fetch("/api/site-settings");
       const json = await res.json();
-      if (json.success && json.data && Object.keys(json.data).length > 0) {
+      // FIX: Use dbAvailable flag instead of checking data object keys
+      // An empty table returns data:{} with dbAvailable:true — that's valid
+      if (json.success && json.dbAvailable === true) {
         setSettings({ ...defaultSettings, ...json.data });
-        setDbAvailable(json.dbAvailable === true);
-        setSaveMode(json.dbAvailable === true ? "api" : "local");
+        setDbAvailable(true);
+        setSaveMode("api");
       } else {
         // API returned empty — fall back to localStorage
         setSettings(loadLocalSettings());
