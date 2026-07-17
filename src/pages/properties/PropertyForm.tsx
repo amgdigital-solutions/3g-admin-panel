@@ -21,6 +21,8 @@ const emptyForm = {
   property_type: "Apartment", status: "draft" as const, bedrooms: 0, bathrooms: 0, area_sqft: 0,
   parking: 0, featured: false, images: [] as string[], amenities: [] as string[],
   meta_title: "", meta_description: "", focus_keywords: "", faqs: [] as FAQ[],
+  // NEW FIELDS
+  handover_date: "", expected_roi: "", rental_yield: "", payment_plan: "50/50", project_status: "off-plan",
 };
 
 async function fetchItem(url: string) {
@@ -53,11 +55,21 @@ export default function PropertyForm() {
             title: data.title || "", slug: data.slug || "", description: data.description || data.content || "",
             barcode: data.barcode || "", developer: data.developer || data.developer_name || "", price: data.price || 0, price_display: data.price_display || "",
             location: data.location || "", property_type: data.property_type || data.category || "Apartment",
-            status: (data.status as "draft" | "published" | "sold_out") || "draft", bedrooms: data.bedrooms || 0,
-            bathrooms: data.bathrooms || 0, area_sqft: data.area_sqft || 0, parking: data.parking || 0,
-            featured: data.showInHero || data.show_in_hero || false, images: data.images || [], amenities: data.amenities || [],
+            status: (data.status as "draft" | "published" | "sold_out") || "draft",
+            bedrooms: data.bedrooms ?? 0,
+            bathrooms: data.bathrooms ?? 0,
+            area_sqft: data.area_sqft ?? 0,
+            parking: data.parking ?? 0,
+            featured: data.showInHero || data.show_in_hero || false,
+            images: data.images || [], amenities: data.amenities || [],
             meta_title: data.meta_title || "", meta_description: data.meta_description || "",
             focus_keywords: data.focus_keywords || "", faqs: (data.faqs as FAQ[]) || [],
+            // NEW FIELDS - load from API response
+            handover_date: data.handover_date || "",
+            expected_roi: data.expected_roi || "",
+            rental_yield: data.rental_yield || "",
+            payment_plan: data.payment_plan || "50/50",
+            project_status: data.project_status || "off-plan",
           });
         }
         setIsLoading(false);
@@ -204,10 +216,49 @@ export default function PropertyForm() {
                     <SelectContent>{PROPERTY_STATUS.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ")}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Bedrooms</Label><Input type="number" value={form.bedrooms || ""} onChange={e => updateField("bedrooms", Number(e.target.value))} /></div>
-                <div className="space-y-2"><Label>Bathrooms</Label><Input type="number" value={form.bathrooms || ""} onChange={e => updateField("bathrooms", Number(e.target.value))} /></div>
-                <div className="space-y-2"><Label>Area (sqft)</Label><Input type="number" value={form.area_sqft || ""} onChange={e => updateField("area_sqft", Number(e.target.value))} /></div>
-                <div className="space-y-2"><Label>Parking Spots</Label><Input type="number" value={form.parking || ""} onChange={e => updateField("parking", Number(e.target.value))} /></div>
+                <div className="space-y-2"><Label>Bedrooms</Label><Input type="number" value={form.bedrooms ?? ""} onChange={e => updateField("bedrooms", e.target.value === "" ? 0 : Number(e.target.value))} /></div>
+                <div className="space-y-2"><Label>Bathrooms</Label><Input type="number" value={form.bathrooms ?? ""} onChange={e => updateField("bathrooms", e.target.value === "" ? 0 : Number(e.target.value))} /></div>
+                <div className="space-y-2"><Label>Area (sqft)</Label><Input type="number" value={form.area_sqft ?? ""} onChange={e => updateField("area_sqft", e.target.value === "" ? 0 : Number(e.target.value))} /></div>
+                <div className="space-y-2"><Label>Parking Spots</Label><Input type="number" value={form.parking ?? ""} onChange={e => updateField("parking", e.target.value === "" ? 0 : Number(e.target.value))} /></div>
+
+                {/* NEW FIELDS */}
+                <div className="space-y-2">
+                  <Label>Handover Date</Label>
+                  <Input value={form.handover_date} onChange={e => updateField("handover_date", e.target.value)} placeholder="e.g., Q4 2026" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Expected ROI</Label>
+                  <Input value={form.expected_roi} onChange={e => updateField("expected_roi", e.target.value)} placeholder="e.g., 15-20%" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rental Yield</Label>
+                  <Input value={form.rental_yield} onChange={e => updateField("rental_yield", e.target.value)} placeholder="e.g., 9-11%" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Plan</Label>
+                  <Select value={form.payment_plan} onValueChange={v => updateField("payment_plan", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="50/50">50/50</SelectItem>
+                      <SelectItem value="60/40">60/40</SelectItem>
+                      <SelectItem value="70/30">70/30</SelectItem>
+                      <SelectItem value="80/20">80/20</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Project Status</Label>
+                  <Select value={form.project_status} onValueChange={v => updateField("project_status", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off-plan">Off-Plan</SelectItem>
+                      <SelectItem value="under-construction">Under Construction</SelectItem>
+                      <SelectItem value="ready">Ready</SelectItem>
+                      <SelectItem value="sold">Sold Out</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex items-center gap-3 pt-4"><Switch id="featured" checked={form.featured} onCheckedChange={v => updateField("featured", v)} /><Label htmlFor="featured" className="cursor-pointer">Featured on Homepage</Label></div>
               </div>
             </div>

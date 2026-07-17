@@ -128,11 +128,12 @@ function mapProperty(body) {
   // Developer - only if provided
   if (body.developer || body.developer_name) mapped.developer_name = body.developer || body.developer_name;
 
-  // Optional flags - only if truthy
+  // Optional flags - always set show_in_hero so it can be toggled off
   if (body.listingType || body.listing_type) mapped.listing_type = body.listingType || body.listing_type;
   if (body.soldOut || body.sold_out) mapped.sold_out = true;
   if (body.hidden) mapped.hidden = true;
-  if (body.showInHero || body.show_in_hero || body.featured) mapped.show_in_hero = true;
+  // FIX: Always set show_in_hero based on featured value (can be true or false)
+  mapped.show_in_hero = !!(body.showInHero || body.show_in_hero || body.featured);
   if (body.isNewLaunch || body.is_new_launch) mapped.is_new_launch = true;
   if (body.goldenVisaEligible || body.golden_visa_eligible) mapped.golden_visa_eligible = true;
 
@@ -145,6 +146,13 @@ function mapProperty(body) {
   if (body.meta_description) mapped.meta_description = body.meta_description;
   if (body.focus_keywords) mapped.focus_keywords = body.focus_keywords;
   if (body.faqs?.length) mapped.faqs = body.faqs;
+
+  // NEW FIELDS: Investment & project info
+  if (body.handover_date !== undefined) mapped.handover_date = body.handover_date || null;
+  if (body.expected_roi !== undefined) mapped.expected_roi = body.expected_roi || null;
+  if (body.rental_yield !== undefined) mapped.rental_yield = body.rental_yield || null;
+  if (body.payment_plan !== undefined) mapped.payment_plan = body.payment_plan || null;
+  if (body.project_status !== undefined) mapped.project_status = body.project_status || null;
 
   return mapped;
 }
@@ -178,7 +186,7 @@ function mapCommunity(body) {
   if (body.location !== undefined) data.location = body.location;
   if (body.priceRange || body.price_range) data.price_range = body.priceRange || body.price_range;
   if (body.avgPricePerSqft || body.avg_price_per_sqft) data.avg_price_per_sqft = body.avgPricePerSqft || body.avg_price_per_sqft;
-  if (body.rentalYield || body.rental_yield) data.rental_yield = body.rentalYield || body.rental_yield;
+  if (body.rentalYield || body.rental_yield) data.rental_yield = body.rental_yield || body.rental_yield;
   if (body.propertyTypes?.length || body.property_types?.length) data.property_types = body.propertyTypes || body.property_types;
   if (body.developer) data.developer = body.developer;
   if (body.image) data.image = body.image;
@@ -375,19 +383,33 @@ export default async function handler(req, res) {
         coverImage: row.featured_image || "", status: row.is_published ? "published" : "draft",
         category: row.property_category || "", location: row.location || "",
         price: row.price || 0, bedrooms: row.bedrooms || "", bathrooms: row.bathrooms || "",
+        area_sqft: row.area_sqft || "", parking: row.parking || "",
         developer: row.developer_name || "", developer_name: row.developer_name || "",
         listingType: row.listing_type || "normal",
         soldOut: row.sold_out || false, hidden: row.hidden || false,
         showInHero: row.show_in_hero || false, isNewLaunch: row.is_new_launch || false,
         goldenVisaEligible: row.golden_visa_eligible || false,
         publishStatus: row.is_published ? "published" : "draft",
+        // NEW FIELDS
+        handover_date: row.handover_date || "",
+        expected_roi: row.expected_roi || "",
+        rental_yield: row.rental_yield || "",
+        payment_plan: row.payment_plan || "",
+        project_status: row.project_status || "",
         createdAt: row.created_at, updatedAt: row.updated_at, ...row,
       }));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: mapped })); return;
     }
 
+    // FIX: CMS GET by ID (numeric) — frontend sends /api/cms/properties/123
     if (cmsPropSlug && req.method === "GET") {
-      const result = await supabaseRequest("listed_properties", "GET", `?slug=eq.${cmsPropSlug}&limit=1`);
+      const slugOrId = cmsPropSlug;
+      let result;
+      // Try by slug first, then by numeric id
+      result = await supabaseRequest("listed_properties", "GET", `?slug=eq.${slugOrId}&limit=1`);
+      if (!result?.[0] && /^\d+$/.test(slugOrId)) {
+        result = await supabaseRequest("listed_properties", "GET", `?id=eq.${slugOrId}&limit=1`);
+      }
       const row = result?.[0];
       res.writeHead(200, cors);
       res.end(JSON.stringify({ success: true, data: row ? {
@@ -396,12 +418,19 @@ export default async function handler(req, res) {
         coverImage: row.featured_image || "", status: row.is_published ? "published" : "draft",
         category: row.property_category || "", location: row.location || "",
         price: row.price || 0, bedrooms: row.bedrooms || "", bathrooms: row.bathrooms || "",
+        area_sqft: row.area_sqft || "", parking: row.parking || "",
         developer: row.developer_name || "", developer_name: row.developer_name || "",
         listingType: row.listing_type || "normal",
         soldOut: row.sold_out || false, hidden: row.hidden || false,
         showInHero: row.show_in_hero || false, isNewLaunch: row.is_new_launch || false,
         goldenVisaEligible: row.golden_visa_eligible || false,
         publishStatus: row.is_published ? "published" : "draft",
+        // NEW FIELDS
+        handover_date: row.handover_date || "",
+        expected_roi: row.expected_roi || "",
+        rental_yield: row.rental_yield || "",
+        payment_plan: row.payment_plan || "",
+        project_status: row.project_status || "",
         createdAt: row.created_at, updatedAt: row.updated_at, ...row,
       } : null })); return;
     }
@@ -415,12 +444,30 @@ export default async function handler(req, res) {
 
     if (cmsPropSlug && req.method === "PUT") {
       const body = await parseBody(req);
-      const result = await safeUpsert("listed_properties", "PATCH", `?slug=eq.${cmsPropSlug}`, mapProperty(body));
+      // FIX: Try by slug first, then by numeric id for PUT
+      let result;
+      try {
+        result = await safeUpsert("listed_properties", "PATCH", `?slug=eq.${cmsPropSlug}`, mapProperty(body));
+      } catch (err) {
+        if (/^\d+$/.test(cmsPropSlug)) {
+          result = await safeUpsert("listed_properties", "PATCH", `?id=eq.${cmsPropSlug}`, mapProperty(body));
+        } else {
+          throw err;
+        }
+      }
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: { _id: String(result[0].id), ...result[0] } })); return;
     }
 
     if (cmsPropSlug && req.method === "DELETE") {
-      await supabaseRequest("listed_properties", "DELETE", `?slug=eq.${cmsPropSlug}`);
+      try {
+        await supabaseRequest("listed_properties", "DELETE", `?slug=eq.${cmsPropSlug}`);
+      } catch (err) {
+        if (/^\d+$/.test(cmsPropSlug)) {
+          await supabaseRequest("listed_properties", "DELETE", `?id=eq.${cmsPropSlug}`);
+        } else {
+          throw err;
+        }
+      }
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true })); return;
     }
 
