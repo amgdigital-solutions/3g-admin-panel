@@ -9,10 +9,11 @@ export interface Property {
   location: string;
   property_type: string;
   status: "draft" | "published" | "sold_out";
-  bedrooms: number;
-  bathrooms: number;
-  area_sqft: number;
-  parking: number;
+  // CHANGED: Now strings for range input (e.g., "1-3")
+  bedrooms: string;
+  bathrooms: string;
+  area_sqft: string;
+  parking: string;
   featured: boolean;
   images: string[];
   amenities: string[];
@@ -20,9 +21,16 @@ export interface Property {
   meta_description: string;
   focus_keywords: string;
   faqs: { q: string; a: string }[];
+  // NEW: Investment & project fields
+  handover_date: string;
+  expected_roi: string;
+  rental_yield: string;
+  payment_plan: string;
+  project_status: string;
   created_at: string;
   updated_at: string;
 }
+
 export interface BlogPost {
   id: string;
   title: string;
@@ -41,6 +49,7 @@ export interface BlogPost {
   created_at: string;
   updated_at: string;
 }
+
 export interface Community {
   id: string;
   name: string;
@@ -59,6 +68,7 @@ export interface Community {
   created_at: string;
   updated_at: string;
 }
+
 export interface DownloadRequest {
   id: string;
   name: string;
@@ -70,6 +80,7 @@ export interface DownloadRequest {
   notes: string;
   created_at: string;
 }
+
 export const PROPERTY_TYPES = ["Apartment", "Villa", "Penthouse", "Townhouse", "Studio", "Mansion", "Office", "Private Island", "Estate"] as const;
 export const BLOG_CATEGORIES = ["Investment Guide", "Market Update", "Community Guide", "Golden Visa", "Lifestyle", "Tips & Advice"] as const;
 export const PROPERTY_STATUS = ["draft", "published", "sold_out"] as const;
