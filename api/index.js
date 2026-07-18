@@ -128,11 +128,31 @@ function mapCmsProperty(row) {
   };
 }
 
+// CRITICAL FIX: Robust status handling with debug logging
 function mapProperty(body) {
   const images = body.images || [];
   const featuredImage = body.coverImage || body.featured_image || images[0] || "";
-  const status = body.status || body.publishStatus || "draft";
   const mapped = {};
+
+  // DEBUG: Log what we receive
+  console.log("[mapProperty] INPUT status:", body.status, "| publishStatus:", body.publishStatus, "| is_published:", body.is_published);
+
+  // CRITICAL FIX: Explicit status handling - no || operator pitfalls
+  let isPublished = false;
+  if (body.status !== undefined && body.status !== null && body.status !== "") {
+    // status can be "published", "sold_out", or "draft"
+    isPublished = body.status === "published" || body.status === "sold_out";
+    console.log("[mapProperty] Using body.status:", body.status, "=> isPublished:", isPublished);
+  } else if (body.publishStatus !== undefined && body.publishStatus !== null && body.publishStatus !== "") {
+    isPublished = body.publishStatus === "published" || body.publishStatus === "sold_out";
+    console.log("[mapProperty] Using body.publishStatus:", body.publishStatus, "=> isPublished:", isPublished);
+  } else if (body.is_published !== undefined && body.is_published !== null) {
+    isPublished = !!body.is_published;
+    console.log("[mapProperty] Using body.is_published:", body.is_published, "=> isPublished:", isPublished);
+  } else {
+    console.log("[mapProperty] No status field found, defaulting to draft");
+  }
+  mapped.is_published = isPublished;
 
   if (body.title !== undefined) mapped.title = body.title;
   if (body.slug !== undefined) mapped.slug = body.slug;
@@ -142,8 +162,6 @@ function mapProperty(body) {
   if (featuredImage) mapped.featured_image = featuredImage;
   if (images.length > 0) mapped.images = images;
 
-  // FIX: Always set is_published explicitly
-  mapped.is_published = (status === "published") || (status === true) || (body.is_published === true);
   if (body.property_type || body.category) mapped.property_category = body.property_type || body.category || "Apartment";
   if (body.location !== undefined) mapped.location = body.location;
   if (body.price !== undefined) mapped.price = body.price;
@@ -177,6 +195,9 @@ function mapProperty(body) {
   if (body.rental_yield !== undefined) mapped.rental_yield = body.rental_yield || null;
   if (body.payment_plan !== undefined) mapped.payment_plan = body.payment_plan || null;
   if (body.project_status !== undefined) mapped.project_status = body.project_status || null;
+
+  // DEBUG: Log what we're sending to Supabase
+  console.log("[mapProperty] OUTPUT is_published:", mapped.is_published, "| mapped keys:", Object.keys(mapped));
 
   return mapped;
 }
@@ -380,6 +401,7 @@ export default async function handler(req, res) {
     if (url === "/api/cms/properties" && req.method === "POST") {
       const body = await parseBody(req);
       if (!body.slug && body.title) body.slug = generateSlug(body.title);
+      console.log("[CMS POST] Creating property with status:", body.status);
       const result = await safeUpsert("listed_properties", "POST", "", mapProperty(body));
       // FIX: Return mapped property with publishStatus
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: result?.[0] ? mapCmsProperty(result[0]) : null })); return;
@@ -388,16 +410,20 @@ export default async function handler(req, res) {
     // FIX: CMS PUT by slug OR numeric id — with publishStatus in response
     if (cmsPropSlug && req.method === "PUT") {
       const body = await parseBody(req);
+      console.log("[CMS PUT] Updating property", cmsPropSlug, "with status:", body.status, "publishStatus:", body.publishStatus);
       let result;
       try {
         result = await safeUpsert("listed_properties", "PATCH", `?slug=eq.${cmsPropSlug}`, mapProperty(body));
       } catch (err) {
         if (/^\d+$/.test(cmsPropSlug)) {
+          console.log("[CMS PUT] Slug lookup failed, retrying by id:", cmsPropSlug);
           result = await safeUpsert("listed_properties", "PATCH", `?id=eq.${cmsPropSlug}`, mapProperty(body));
         } else { throw err; }
       }
       // FIX: Return mapped property with publishStatus
-      res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: result?.[0] ? mapCmsProperty(result[0]) : null })); return;
+      const responseData = result?.[0] ? mapCmsProperty(result[0]) : null;
+      console.log("[CMS PUT] Response status:", responseData?.status, "publishStatus:", responseData?.publishStatus);
+      res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: responseData })); return;
     }
 
     // FIX: CMS DELETE by slug OR numeric id
