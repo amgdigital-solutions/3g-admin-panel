@@ -18,9 +18,11 @@ interface FAQ { q: string; a: string; }
 
 const emptyForm = {
   title: "", slug: "", description: "", barcode: "", developer: "", price: 0, price_display: "", location: "",
-  property_type: "Apartment", status: "draft" as const, bedrooms: 0, bathrooms: 0, area_sqft: 0,
-  parking: 0, featured: false, images: [] as string[], amenities: [] as string[],
+  property_type: "Apartment", status: "draft" as const, bedrooms: "", bathrooms: "", area_sqft: "",
+  parking: "", featured: false, images: [] as string[], amenities: [] as string[],
   meta_title: "", meta_description: "", focus_keywords: "", faqs: [] as FAQ[],
+  // NEW: Investment & project fields
+  handover_date: "", expected_roi: "", rental_yield: "", payment_plan: "", project_status: "off-plan",
 };
 
 async function fetchItem(url: string) {
@@ -49,15 +51,28 @@ export default function PropertyForm() {
       setIsLoading(true);
       fetchItem(`/api/cms/properties/${id}`).then((data) => {
         if (data) {
+          // FIX: Read publishStatus first (API returns this), fallback to status
+          const loadedStatus = data.publishStatus || data.status || "draft";
           setForm({
             title: data.title || "", slug: data.slug || "", description: data.description || data.content || "",
             barcode: data.barcode || "", developer: data.developer || data.developer_name || "", price: data.price || 0, price_display: data.price_display || "",
             location: data.location || "", property_type: data.property_type || data.category || "Apartment",
-            status: (data.status as "draft" | "published" | "sold_out") || "draft", bedrooms: data.bedrooms || 0,
-            bathrooms: data.bathrooms || 0, area_sqft: data.area_sqft || 0, parking: data.parking || 0,
+            // FIX: Use publishStatus from API response
+            status: (loadedStatus as "draft" | "published" | "sold_out"),
+            // FIX: String range fields (not numbers)
+            bedrooms: data.bedrooms ? String(data.bedrooms) : "",
+            bathrooms: data.bathrooms ? String(data.bathrooms) : "",
+            area_sqft: data.area_sqft ? String(data.area_sqft) : "",
+            parking: data.parking ? String(data.parking) : "",
             featured: data.showInHero || data.show_in_hero || false, images: data.images || [], amenities: data.amenities || [],
             meta_title: data.meta_title || "", meta_description: data.meta_description || "",
             focus_keywords: data.focus_keywords || "", faqs: (data.faqs as FAQ[]) || [],
+            // NEW FIELDS
+            handover_date: data.handover_date || "",
+            expected_roi: data.expected_roi || "",
+            rental_yield: data.rental_yield || "",
+            payment_plan: data.payment_plan || "",
+            project_status: data.project_status || "off-plan",
           });
         }
         setIsLoading(false);
@@ -70,7 +85,6 @@ export default function PropertyForm() {
     setIsSubmitting(true);
     setError(null);
 
-    // Validation
     if (!form.title.trim()) { setError("Property title is required"); setIsSubmitting(false); return; }
     if (!form.slug.trim()) { setError("Slug is required"); setIsSubmitting(false); return; }
 
@@ -91,7 +105,7 @@ export default function PropertyForm() {
       console.log(`[PropertyForm] Response ${res.status}:`, text);
 
       let json = {};
-      try { json = JSON.parse(text); } catch { /* ignore parse error */ }
+      try { json = JSON.parse(text); } catch { /* ignore */ }
 
       if (!res.ok || (json as any).success === false) {
         const msg = (json as any).error || `Failed to ${isEditing ? "update" : "create"} property (HTTP ${res.status})`;
@@ -166,30 +180,37 @@ export default function PropertyForm() {
           <TabsContent value="basic" className="space-y-4">
             <div className="bg-white rounded-lg border p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Title */}
                 <div className="space-y-2 md:col-span-2">
                   <Label>Property Title *</Label>
-                  <Input value={form.title} onChange={e => { const val = e.target.value; setForm(f => ({ ...f, title: val, slug: f.slug || generateSlug(val) })); }} placeholder="e.g. Luxury 2BR in Dubai Marina" required />
+                  <Input value={form.title} onChange={e => { const val = e.target.value; setForm(f => ({ ...f, title: val, slug: f.slug || generateSlug(val) })); }} placeholder="e.g. Azizi Venice" required />
                 </div>
+                {/* Slug */}
                 <div className="space-y-2 md:col-span-2">
                   <Label>Slug (URL) *</Label>
-                  <div className="flex items-center gap-2"><span className="text-sm text-gray-400 whitespace-nowrap">/property/</span><Input value={form.slug} onChange={e => updateField("slug", e.target.value)} placeholder="luxury-2br-dubai-marina" required /></div>
+                  <div className="flex items-center gap-2"><span className="text-sm text-gray-400 whitespace-nowrap">/property/</span><Input value={form.slug} onChange={e => updateField("slug", e.target.value)} placeholder="azizi-venice" required /></div>
                 </div>
+                {/* Developer */}
                 <div className="space-y-2 md:col-span-2">
                   <Label className="flex items-center gap-1.5"><Building2 className="h-4 w-4 text-gray-400" />Developer</Label>
-                  <Input value={form.developer} onChange={e => updateField("developer", e.target.value)} placeholder="e.g. Emaar, Damac, Nakheel" />
-                  <p className="text-xs text-gray-400">The developer or builder of this property. Used for search filtering on the frontend.</p>
+                  <Input value={form.developer} onChange={e => updateField("developer", e.target.value)} placeholder="e.g. Azizi Developments" />
                 </div>
+                {/* Barcode */}
                 <div className="space-y-2 md:col-span-2">
-                  <Label><Barcode className="h-4 w-4 inline mr-1.5 text-gray-400" />Barcode Image</Label>
-                  <ImageUpload value={form.barcode} onChange={(url) => updateField("barcode", url)} type="properties" label="Barcode / QR Code" folder="barcodes" />
+                  <Label><Barcode className="h-4 w-4 inline mr-1.5 text-gray-400" />Barcode / QR Code Image</Label>
+                  <ImageUpload value={form.barcode} onChange={(url) => updateField("barcode", url)} type="properties" label="Upload QR Code" folder="barcodes" />
                 </div>
+                {/* Description */}
                 <div className="space-y-2 md:col-span-2">
                   <Label>Description</Label>
                   <TiptapEditor content={form.description} onChange={html => updateField("description", html)} placeholder="Write property description..." />
                 </div>
+                {/* Price */}
                 <div className="space-y-2"><Label>Price (AED)</Label><Input type="number" value={form.price || ""} onChange={e => updateField("price", Number(e.target.value))} placeholder="1200000" /></div>
                 <div className="space-y-2"><Label>Price Display Text</Label><Input value={form.price_display} onChange={e => updateField("price_display", e.target.value)} placeholder="e.g. 1.2M AED" /></div>
-                <div className="space-y-2"><Label>Location</Label><Input value={form.location} onChange={e => updateField("location", e.target.value)} placeholder="e.g. Dubai Marina" /></div>
+                {/* Location */}
+                <div className="space-y-2"><Label>Location</Label><Input value={form.location} onChange={e => updateField("location", e.target.value)} placeholder="e.g. Dubai South" /></div>
+                {/* Property Type */}
                 <div className="space-y-2">
                   <Label>Property Type</Label>
                   <Select value={form.property_type} onValueChange={v => updateField("property_type", v)}>
@@ -197,18 +218,75 @@ export default function PropertyForm() {
                     <SelectContent>{PROPERTY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                {/* Status */}
                 <div className="space-y-2">
-                  <Label>Status</Label>
+                  <Label>Status *</Label>
                   <Select value={form.status} onValueChange={v => updateField("status", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{PROPERTY_STATUS.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ")}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Bedrooms</Label><Input type="number" value={form.bedrooms || ""} onChange={e => updateField("bedrooms", Number(e.target.value))} /></div>
-                <div className="space-y-2"><Label>Bathrooms</Label><Input type="number" value={form.bathrooms || ""} onChange={e => updateField("bathrooms", Number(e.target.value))} /></div>
-                <div className="space-y-2"><Label>Area (sqft)</Label><Input type="number" value={form.area_sqft || ""} onChange={e => updateField("area_sqft", Number(e.target.value))} /></div>
-                <div className="space-y-2"><Label>Parking Spots</Label><Input type="number" value={form.parking || ""} onChange={e => updateField("parking", Number(e.target.value))} /></div>
-                <div className="flex items-center gap-3 pt-4"><Switch id="featured" checked={form.featured} onCheckedChange={v => updateField("featured", v)} /><Label htmlFor="featured" className="cursor-pointer">Featured on Homepage</Label></div>
+
+                {/* ─── RANGE FIELDS (text, not number) ─── */}
+                <div className="space-y-2">
+                  <Label>Bedrooms (Range)</Label>
+                  <Input value={form.bedrooms} onChange={e => updateField("bedrooms", e.target.value)} placeholder="e.g. 1-3" />
+                  <p className="text-xs text-gray-400">Enter range like 1-3 or Studio-3</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Bathrooms (Range)</Label>
+                  <Input value={form.bathrooms} onChange={e => updateField("bathrooms", e.target.value)} placeholder="e.g. 1-2" />
+                  <p className="text-xs text-gray-400">Enter range like 1-2</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Area sqft (Range)</Label>
+                  <Input value={form.area_sqft} onChange={e => updateField("area_sqft", e.target.value)} placeholder="e.g. 400-1200" />
+                  <p className="text-xs text-gray-400">Enter range like 400-1200 sqft</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Parking Spots (Range)</Label>
+                  <Input value={form.parking} onChange={e => updateField("parking", e.target.value)} placeholder="e.g. 0-2" />
+                  <p className="text-xs text-gray-400">Enter range like 0-2</p>
+                </div>
+
+                {/* ─── NEW: Investment & Project Fields ─── */}
+                <div className="space-y-2">
+                  <Label>Handover Date</Label>
+                  <Input value={form.handover_date} onChange={e => updateField("handover_date", e.target.value)} placeholder="e.g. Q4 2026" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Expected ROI</Label>
+                  <Input value={form.expected_roi} onChange={e => updateField("expected_roi", e.target.value)} placeholder="e.g. 15-20%" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rental Yield</Label>
+                  <Input value={form.rental_yield} onChange={e => updateField("rental_yield", e.target.value)} placeholder="e.g. 9-11%" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Project Status</Label>
+                  <Select value={form.project_status} onValueChange={v => updateField("project_status", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off-plan">Off-Plan</SelectItem>
+                      <SelectItem value="under-construction">Under Construction</SelectItem>
+                      <SelectItem value="ready">Ready</SelectItem>
+                      <SelectItem value="sold">Sold Out</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* ─── CUSTOM PAYMENT PLAN (text, not dropdown) ─── */}
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Payment Plan</Label>
+                  <Input value={form.payment_plan} onChange={e => updateField("payment_plan", e.target.value)} placeholder="e.g. 10% Advance, 40% During Construction, 50% at Handover" />
+                  <p className="text-xs text-gray-400">Describe the payment structure freely. Example: 10% Booking, 30% During Construction, 60% On Handover</p>
+                </div>
+
+                {/* Featured Toggle */}
+                <div className="flex items-center gap-3 pt-4 md:col-span-2">
+                  <Switch id="featured" checked={form.featured} onCheckedChange={v => updateField("featured", v)} />
+                  <Label htmlFor="featured" className="cursor-pointer">Featured on Homepage</Label>
+                </div>
               </div>
             </div>
           </TabsContent>
