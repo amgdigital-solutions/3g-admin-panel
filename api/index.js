@@ -109,6 +109,7 @@ function mapCmsProperty(row) {
     publishStatus: row.is_published ? "published" : "draft",
     category: row.property_category || "", location: row.location || "",
     price: row.price || 0,
+    price_display: row.price_display || "",
     bedrooms: row.bedrooms != null ? String(row.bedrooms) : "",
     bathrooms: row.bathrooms != null ? String(row.bathrooms) : "",
     area_sqft: row.area_sqft != null ? String(row.area_sqft) : "",
@@ -118,6 +119,15 @@ function mapCmsProperty(row) {
     soldOut: row.sold_out || false, hidden: row.hidden || false,
     showInHero: row.show_in_hero || false, isNewLaunch: row.is_new_launch || false,
     goldenVisaEligible: row.golden_visa_eligible || false,
+    // SEO & META
+    meta_title: row.meta_title || "",
+    meta_description: row.meta_description || "",
+    focus_keywords: row.focus_keywords || "",
+    // MEDIA & DATA
+    images: row.images || [],
+    amenities: row.amenities || [],
+    barcode: row.barcode || "",
+    faqs: row.faqs || [],
     // NEW FIELDS
     handover_date: row.handover_date || "",
     expected_roi: row.expected_roi || "",
@@ -140,7 +150,6 @@ function mapProperty(body) {
   // CRITICAL FIX: Explicit status handling - no || operator pitfalls
   let isPublished = false;
   if (body.status !== undefined && body.status !== null && body.status !== "") {
-    // status can be "published", "sold_out", or "draft"
     isPublished = body.status === "published" || body.status === "sold_out";
     console.log("[mapProperty] Using body.status:", body.status, "=> isPublished:", isPublished);
   } else if (body.publishStatus !== undefined && body.publishStatus !== null && body.publishStatus !== "") {
@@ -167,7 +176,6 @@ function mapProperty(body) {
   if (body.price !== undefined) mapped.price = body.price;
   if (body.price_display !== undefined) mapped.price_display = body.price_display;
 
-  // FIX: Pass through as-is (strings for ranges)
   if (body.bedrooms !== undefined) mapped.bedrooms = body.bedrooms;
   if (body.bathrooms !== undefined) mapped.bathrooms = body.bathrooms;
   if (body.area_sqft !== undefined) mapped.area_sqft = body.area_sqft;
@@ -184,19 +192,17 @@ function mapProperty(body) {
 
   if (body.barcode) mapped.barcode = body.barcode;
   if (body.amenities?.length) mapped.amenities = body.amenities;
-  if (body.meta_title) mapped.meta_title = body.meta_title;
-  if (body.meta_description) mapped.meta_description = body.meta_description;
-  if (body.focus_keywords) mapped.focus_keywords = body.focus_keywords;
+  if (body.meta_title !== undefined) mapped.meta_title = body.meta_title;
+  if (body.meta_description !== undefined) mapped.meta_description = body.meta_description;
+  if (body.focus_keywords !== undefined) mapped.focus_keywords = body.focus_keywords;
   if (body.faqs?.length) mapped.faqs = body.faqs;
 
-  // NEW FIELDS
   if (body.handover_date !== undefined) mapped.handover_date = body.handover_date || null;
   if (body.expected_roi !== undefined) mapped.expected_roi = body.expected_roi || null;
   if (body.rental_yield !== undefined) mapped.rental_yield = body.rental_yield || null;
   if (body.payment_plan !== undefined) mapped.payment_plan = body.payment_plan || null;
   if (body.project_status !== undefined) mapped.project_status = body.project_status || null;
 
-  // DEBUG: Log what we're sending to Supabase
   console.log("[mapProperty] OUTPUT is_published:", mapped.is_published, "| mapped keys:", Object.keys(mapped));
 
   return mapped;
@@ -379,12 +385,10 @@ export default async function handler(req, res) {
 
     if (url === "/api/cms/properties" && req.method === "GET") {
       const result = await supabaseRequest("listed_properties", "GET", "?order=id.asc");
-      // FIX: Use mapCmsProperty helper for consistent mapping
       const mapped = (result || []).map(row => mapCmsProperty(row));
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: mapped })); return;
     }
 
-    // FIX: CMS GET by slug OR numeric id
     if (cmsPropSlug && req.method === "GET") {
       const slugOrId = cmsPropSlug;
       let result;
@@ -393,7 +397,6 @@ export default async function handler(req, res) {
         result = await supabaseRequest("listed_properties", "GET", `?id=eq.${slugOrId}&limit=1`);
       }
       const row = result?.[0];
-      // FIX: Use mapCmsProperty helper
       res.writeHead(200, cors);
       res.end(JSON.stringify({ success: true, data: row ? mapCmsProperty(row) : null })); return;
     }
@@ -403,11 +406,9 @@ export default async function handler(req, res) {
       if (!body.slug && body.title) body.slug = generateSlug(body.title);
       console.log("[CMS POST] Creating property with status:", body.status);
       const result = await safeUpsert("listed_properties", "POST", "", mapProperty(body));
-      // FIX: Return mapped property with publishStatus
       res.writeHead(201, cors); res.end(JSON.stringify({ success: true, data: result?.[0] ? mapCmsProperty(result[0]) : null })); return;
     }
 
-    // FIX: CMS PUT by slug OR numeric id — with publishStatus in response
     if (cmsPropSlug && req.method === "PUT") {
       const body = await parseBody(req);
       console.log("[CMS PUT] Updating property", cmsPropSlug, "with status:", body.status, "publishStatus:", body.publishStatus);
@@ -420,13 +421,11 @@ export default async function handler(req, res) {
           result = await safeUpsert("listed_properties", "PATCH", `?id=eq.${cmsPropSlug}`, mapProperty(body));
         } else { throw err; }
       }
-      // FIX: Return mapped property with publishStatus
       const responseData = result?.[0] ? mapCmsProperty(result[0]) : null;
       console.log("[CMS PUT] Response status:", responseData?.status, "publishStatus:", responseData?.publishStatus);
       res.writeHead(200, cors); res.end(JSON.stringify({ success: true, data: responseData })); return;
     }
 
-    // FIX: CMS DELETE by slug OR numeric id
     if (cmsPropSlug && req.method === "DELETE") {
       try {
         await supabaseRequest("listed_properties", "DELETE", `?slug=eq.${cmsPropSlug}`);
