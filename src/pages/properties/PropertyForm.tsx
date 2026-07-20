@@ -17,7 +17,7 @@ import { ArrowLeft, Plus, X, Save, Barcode, AlertCircle, Building2 } from "lucid
 interface FAQ { q: string; a: string; }
 
 const emptyForm = {
-  title: "", slug: "", description: "", barcode: "", developer: "", price: 0, price_display: "", location: "",
+  title: "", slug: "", description: "", short_description: "", barcode: "", developer: "", price: 0, price_display: "", location: "",
   property_type: "Apartment", status: "draft" as const, bedrooms: "", bathrooms: "", area_sqft: "",
   parking: "", featured: false, images: [] as string[], amenities: [] as string[],
   meta_title: "", meta_description: "", focus_keywords: "", faqs: [] as FAQ[],
@@ -54,20 +54,23 @@ export default function PropertyForm() {
           // FIX: Read publishStatus first (API returns this), fallback to status
           const loadedStatus = data.publishStatus || data.status || "draft";
           setForm({
-            title: data.title || "", slug: data.slug || "", description: data.description || data.content || "",
-            barcode: data.barcode || "", developer: data.developer || data.developer_name || "", price: data.price || 0, price_display: data.price_display || "",
+            title: data.title || "", slug: data.slug || "", 
+            description: data.description || data.content || "",
+            short_description: data.excerpt || data.short_description || "",
+            barcode: data.barcode || "", developer: data.developer || data.developer_name || "", 
+            price: data.price || 0, price_display: data.price_display || "",
             location: data.location || "", property_type: data.property_type || data.category || "Apartment",
-            // FIX: Use publishStatus from API response
             status: (loadedStatus as "draft" | "published" | "sold_out"),
-            // FIX: String range fields (not numbers)
             bedrooms: data.bedrooms ? String(data.bedrooms) : "",
             bathrooms: data.bathrooms ? String(data.bathrooms) : "",
             area_sqft: data.area_sqft ? String(data.area_sqft) : "",
             parking: data.parking ? String(data.parking) : "",
-            featured: data.showInHero || data.show_in_hero || false, images: data.images || [], amenities: data.amenities || [],
-            meta_title: data.meta_title || "", meta_description: data.meta_description || "",
-            focus_keywords: data.focus_keywords || "", faqs: (data.faqs as FAQ[]) || [],
-            // NEW FIELDS
+            featured: data.showInHero || data.show_in_hero || false, 
+            images: data.images || [], amenities: data.amenities || [],
+            meta_title: data.meta_title || "", 
+            meta_description: data.meta_description || "",
+            focus_keywords: data.focus_keywords || "", 
+            faqs: (data.faqs as FAQ[]) || [],
             handover_date: data.handover_date || "",
             expected_roi: data.expected_roi || "",
             rental_yield: data.rental_yield || "",
@@ -89,7 +92,7 @@ export default function PropertyForm() {
     if (!form.slug.trim()) { setError("Slug is required"); setIsSubmitting(false); return; }
 
     try {
-      const payload = { ...form, show_in_hero: form.featured };
+      const payload = { ...form, show_in_hero: form.featured, excerpt: form.short_description };
       const url = isEditing && id ? `/api/cms/properties/${id}` : "/api/cms/properties";
       const method = isEditing && id ? "PUT" : "POST";
 
@@ -205,6 +208,12 @@ export default function PropertyForm() {
                   <Label>Description</Label>
                   <TiptapEditor content={form.description} onChange={html => updateField("description", html)} placeholder="Write property description..." />
                 </div>
+                {/* Short Description */}
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Short Description (Excerpt)</Label>
+                  <Textarea value={form.short_description} onChange={e => updateField("short_description", e.target.value)} placeholder="Brief summary for listings and SEO snippets (1-2 sentences)" rows={2} maxLength={300} />
+                  <p className="text-xs text-gray-400">{form.short_description.length}/300 characters. Used for property cards and search previews.</p>
+                </div>
                 {/* Price */}
                 <div className="space-y-2"><Label>Price (AED)</Label><Input type="number" value={form.price || ""} onChange={e => updateField("price", Number(e.target.value))} placeholder="1200000" /></div>
                 <div className="space-y-2"><Label>Price Display Text</Label><Input value={form.price_display} onChange={e => updateField("price_display", e.target.value)} placeholder="e.g. 1.2M AED" /></div>
@@ -227,7 +236,7 @@ export default function PropertyForm() {
                   </Select>
                 </div>
 
-                {/* ─── RANGE FIELDS (text, not number) ─── */}
+                {/* RANGE FIELDS (text, not number) */}
                 <div className="space-y-2">
                   <Label>Bedrooms (Range)</Label>
                   <Input value={form.bedrooms} onChange={e => updateField("bedrooms", e.target.value)} placeholder="e.g. 1-3" />
@@ -249,7 +258,7 @@ export default function PropertyForm() {
                   <p className="text-xs text-gray-400">Enter range like 0-2</p>
                 </div>
 
-                {/* ─── NEW: Investment & Project Fields ─── */}
+                {/* NEW: Investment & Project Fields */}
                 <div className="space-y-2">
                   <Label>Handover Date</Label>
                   <Input value={form.handover_date} onChange={e => updateField("handover_date", e.target.value)} placeholder="e.g. Q4 2026" />
@@ -275,7 +284,7 @@ export default function PropertyForm() {
                   </Select>
                 </div>
 
-                {/* ─── CUSTOM PAYMENT PLAN (text, not dropdown) ─── */}
+                {/* CUSTOM PAYMENT PLAN (text, not dropdown) */}
                 <div className="space-y-2 md:col-span-2">
                   <Label>Payment Plan</Label>
                   <Input value={form.payment_plan} onChange={e => updateField("payment_plan", e.target.value)} placeholder="e.g. 10% Advance, 40% During Construction, 50% at Handover" />
