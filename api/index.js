@@ -110,10 +110,16 @@ function mapCmsProperty(row) {
     category: row.property_category || "", location: row.location || "",
     price: row.price || 0,
     price_display: row.price_display || "",
+    // Legacy text fields
     bedrooms: row.bedrooms != null ? String(row.bedrooms) : "",
     bathrooms: row.bathrooms != null ? String(row.bathrooms) : "",
     area_sqft: row.area_sqft != null ? String(row.area_sqft) : "",
     parking: row.parking != null ? String(row.parking) : "",
+    // NEW: Min/max numeric fields
+    beds_min: row.beds_min != null ? Number(row.beds_min) : null,
+    beds_max: row.beds_max != null ? Number(row.beds_max) : null,
+    baths_min: row.baths_min != null ? Number(row.baths_min) : null,
+    baths_max: row.baths_max != null ? Number(row.baths_max) : null,
     developer: row.developer_name || "", developer_name: row.developer_name || "",
     listingType: row.listing_type || "normal",
     soldOut: row.sold_out || false, hidden: row.hidden || false,
@@ -176,10 +182,29 @@ function mapProperty(body) {
   if (body.price !== undefined) mapped.price = body.price;
   if (body.price_display !== undefined) mapped.price_display = body.price_display;
 
+  // Legacy text fields (still stored for backward compatibility)
   if (body.bedrooms !== undefined) mapped.bedrooms = body.bedrooms;
   if (body.bathrooms !== undefined) mapped.bathrooms = body.bathrooms;
   if (body.area_sqft !== undefined) mapped.area_sqft = body.area_sqft;
   if (body.parking !== undefined) mapped.parking = body.parking;
+
+  // NEW: Min/max numeric fields for reliable filtering
+  if (body.beds_min !== undefined && body.beds_min !== "" && body.beds_min !== null) {
+    const n = Number(body.beds_min);
+    if (!isNaN(n)) mapped.beds_min = n;
+  }
+  if (body.beds_max !== undefined && body.beds_max !== "" && body.beds_max !== null) {
+    const n = Number(body.beds_max);
+    if (!isNaN(n)) mapped.beds_max = n;
+  }
+  if (body.baths_min !== undefined && body.baths_min !== "" && body.baths_min !== null) {
+    const n = Number(body.baths_min);
+    if (!isNaN(n)) mapped.baths_min = n;
+  }
+  if (body.baths_max !== undefined && body.baths_max !== "" && body.baths_max !== null) {
+    const n = Number(body.baths_max);
+    if (!isNaN(n)) mapped.baths_max = n;
+  }
 
   if (body.developer || body.developer_name) mapped.developer_name = body.developer || body.developer_name;
 
