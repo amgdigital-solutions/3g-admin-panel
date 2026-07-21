@@ -9,11 +9,16 @@ export interface Property {
   location: string;
   property_type: string;
   status: "draft" | "published" | "sold_out";
-  // CHANGED: Now strings for range input (e.g., "1-3")
+  // Legacy text fields (kept for backward compatibility)
   bedrooms: string;
   bathrooms: string;
   area_sqft: string;
   parking: string;
+  // NEW: Min/max numeric fields for reliable filtering
+  beds_min: number | null;
+  beds_max: number | null;
+  baths_min: number | null;
+  baths_max: number | null;
   featured: boolean;
   images: string[];
   amenities: string[];
