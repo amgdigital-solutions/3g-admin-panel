@@ -18,8 +18,15 @@ interface FAQ { q: string; a: string; }
 
 const emptyForm = {
   title: "", slug: "", description: "", short_description: "", barcode: "", developer: "", price: 0, price_display: "", location: "",
-  property_type: "Apartment", status: "draft" as const, bedrooms: "", bathrooms: "", area_sqft: "",
-  parking: "", featured: false, images: [] as string[], amenities: [] as string[],
+  property_type: "Apartment", status: "draft" as const,
+  // Legacy text range fields (kept for backward compatibility)
+  bedrooms: "", bathrooms: "", area_sqft: "", parking: "",
+  // NEW: Min/max numeric fields for reliable filtering
+  beds_min: "" as string | number,
+  beds_max: "" as string | number,
+  baths_min: "" as string | number,
+  baths_max: "" as string | number,
+  featured: false, images: [] as string[], amenities: [] as string[],
   meta_title: "", meta_description: "", focus_keywords: "", faqs: [] as FAQ[],
   // NEW: Investment & project fields
   handover_date: "", expected_roi: "", rental_yield: "", payment_plan: "", project_status: "off-plan",
@@ -61,10 +68,16 @@ export default function PropertyForm() {
             price: data.price || 0, price_display: data.price_display || "",
             location: data.location || "", property_type: data.property_type || data.category || "Apartment",
             status: (loadedStatus as "draft" | "published" | "sold_out"),
+            // Legacy fields (still synced)
             bedrooms: data.bedrooms ? String(data.bedrooms) : "",
             bathrooms: data.bathrooms ? String(data.bathrooms) : "",
             area_sqft: data.area_sqft ? String(data.area_sqft) : "",
             parking: data.parking ? String(data.parking) : "",
+            // NEW: Min/max fields from API
+            beds_min: data.beds_min != null ? data.beds_min : "",
+            beds_max: data.beds_max != null ? data.beds_max : "",
+            baths_min: data.baths_min != null ? data.baths_min : "",
+            baths_max: data.baths_max != null ? data.baths_max : "",
             featured: data.showInHero || data.show_in_hero || false, 
             images: data.images || [], amenities: data.amenities || [],
             meta_title: data.meta_title || "", 
@@ -236,22 +249,63 @@ export default function PropertyForm() {
                   </Select>
                 </div>
 
-                {/* RANGE FIELDS (text, not number) */}
+                {/* BEDROOMS: Min / Max number inputs */}
                 <div className="space-y-2">
-                  <Label>Bedrooms (Range)</Label>
-                  <Input value={form.bedrooms} onChange={e => updateField("bedrooms", e.target.value)} placeholder="e.g. 1-3" />
-                  <p className="text-xs text-gray-400">Enter range like 1-3 or Studio-3</p>
+                  <Label>Bedrooms</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.beds_min}
+                      onChange={e => updateField("beds_min", e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="Min"
+                      className="text-center"
+                    />
+                    <span className="text-gray-400 text-sm">-</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.beds_max}
+                      onChange={e => updateField("beds_max", e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="Max"
+                      className="text-center"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">Set min and max (e.g. 1 - 3). For single value, set both the same.</p>
                 </div>
+
+                {/* BATHROOMS: Min / Max number inputs */}
                 <div className="space-y-2">
-                  <Label>Bathrooms (Range)</Label>
-                  <Input value={form.bathrooms} onChange={e => updateField("bathrooms", e.target.value)} placeholder="e.g. 1-2" />
-                  <p className="text-xs text-gray-400">Enter range like 1-2</p>
+                  <Label>Bathrooms</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.baths_min}
+                      onChange={e => updateField("baths_min", e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="Min"
+                      className="text-center"
+                    />
+                    <span className="text-gray-400 text-sm">-</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.baths_max}
+                      onChange={e => updateField("baths_max", e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="Max"
+                      className="text-center"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">Set min and max (e.g. 1 - 2). For single value, set both the same.</p>
                 </div>
+
+                {/* Area sqft (text range - unchanged) */}
                 <div className="space-y-2">
                   <Label>Area sqft (Range)</Label>
                   <Input value={form.area_sqft} onChange={e => updateField("area_sqft", e.target.value)} placeholder="e.g. 400-1200" />
                   <p className="text-xs text-gray-400">Enter range like 400-1200 sqft</p>
                 </div>
+                {/* Parking (text range - unchanged) */}
                 <div className="space-y-2">
                   <Label>Parking Spots (Range)</Label>
                   <Input value={form.parking} onChange={e => updateField("parking", e.target.value)} placeholder="e.g. 0-2" />
